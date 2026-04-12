@@ -591,7 +591,10 @@
     // --- Submit: transform UI rules to engine format ---
     function prepareSubmit() {
       var engineRules = rules.map(function(r) {
-        var rule = { action: r.action };
+        // Map UI action names back to engine names
+        var action = r.action;
+        if (action === "require_approval") action = "approval_required";
+        var rule = { action: action };
         if (r.reason) rule.reason = r.reason;
         if (r.filter_exclude) rule.filter_exclude = r.filter_exclude;
         if (r.redact) rule.redact_patterns = [r.redact];
