@@ -1,0 +1,9 @@
+data/
+sieve
+*.db
+*client_secret*.json
+.env
+.vscode/
+.idea/
+*.swp
+*~

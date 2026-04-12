@@ -1,0 +1,669 @@
+{{define "policy_edit"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Policy: {{.Policy.Name}} - Sieve</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  {{template "nav" .}}
+
+  <main class="ml-64 p-8">
+    <div class="max-w-6xl">
+      <h1 class="text-2xl font-bold text-white mb-6">Edit Policy: {{.Policy.Name}}</h1>
+
+      <!-- Edit Policy Form -->
+      <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+        <form id="create-policy-form" method="POST" action="/policies/{{.Policy.ID}}/update" onsubmit="return prepareSubmit()">
+          <input type="hidden" name="policy_type" value="rules">
+          <input type="hidden" id="policy_config" name="policy_config" value="">
+
+          <!-- Policy Name -->
+          <div class="mb-6">
+            <label for="name" class="block text-sm font-medium text-slate-400 mb-1.5">Policy Name</label>
+            <input type="text" id="name" name="name" required placeholder="e.g. read-only-agent"
+                   value="{{.Policy.Name}}"
+                   class="w-full max-w-md rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+          </div>
+
+          <!-- Rule Builder -->
+          <div class="border-t border-slate-700 pt-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-md font-semibold text-white">Policy Rules</h3>
+              <div class="flex items-center gap-3">
+                <select id="preset-select" class="rounded-lg bg-slate-900 border border-slate-600 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                  <option value="">Load a preset...</option>
+                  <option value="read-only">read-only</option>
+                  <option value="drafter">drafter</option>
+                  <option value="full-assist">full-assist</option>
+                  <option value="triage">triage</option>
+                </select>
+                <button type="button" onclick="loadPreset()"
+                        class="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors">
+                  Load Preset
+                </button>
+              </div>
+            </div>
+
+            <!-- Rules List -->
+            <div id="rules-list" class="space-y-3 mb-4">
+              <!-- Rule cards rendered by JS -->
+            </div>
+
+            <div id="empty-rules" class="text-center py-8 text-slate-500 text-sm border border-dashed border-slate-700 rounded-lg mb-4">
+              No rules yet. Load a preset or add rules manually.
+            </div>
+
+            <!-- Add Rule Button -->
+            <button type="button" id="btn-add-rule" onclick="showAddRuleForm()"
+                    class="inline-flex items-center gap-2 rounded-lg bg-slate-700 border border-slate-600 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 hover:text-white transition-colors mb-4">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add Rule
+            </button>
+
+            <!-- Inline Add Rule Form (hidden by default) -->
+            <div id="add-rule-form" class="hidden bg-slate-900 border border-slate-600 rounded-xl p-5 mb-4">
+              <h4 class="text-sm font-semibold text-white mb-4">New Rule</h4>
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Left: Conditions -->
+                <div id="match-conditions-section">
+                  <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">When</p>
+
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-sm text-slate-400 mb-1">Operations</label>
+                      <div id="ops-checkboxes" class="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-3">
+                        <div>
+                          <p class="text-xs text-slate-500 font-medium mb-1.5">Read</p>
+                          <div class="grid grid-cols-2 gap-1.5">
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="list_emails"><span class="text-xs text-slate-300">list_emails</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="read_email"><span class="text-xs text-slate-300">read_email</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="read_thread"><span class="text-xs text-slate-300">read_thread</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="get_attachment"><span class="text-xs text-slate-300">get_attachment</span></label>
+                          </div>
+                        </div>
+                        <div>
+                          <p class="text-xs text-slate-500 font-medium mb-1.5">Compose</p>
+                          <div class="grid grid-cols-2 gap-1.5">
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="create_draft"><span class="text-xs text-slate-300">create_draft</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="update_draft"><span class="text-xs text-slate-300">update_draft</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="reply"><span class="text-xs text-slate-300">reply</span></label>
+                          </div>
+                        </div>
+                        <div>
+                          <p class="text-xs text-slate-500 font-medium mb-1.5">Send</p>
+                          <div class="grid grid-cols-2 gap-1.5">
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="send_email"><span class="text-xs text-slate-300">send_email</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="send_draft"><span class="text-xs text-slate-300">send_draft</span></label>
+                          </div>
+                        </div>
+                        <div>
+                          <p class="text-xs text-slate-500 font-medium mb-1.5">Organize</p>
+                          <div class="grid grid-cols-2 gap-1.5">
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="add_label"><span class="text-xs text-slate-300">add_label</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="remove_label"><span class="text-xs text-slate-300">remove_label</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="archive"><span class="text-xs text-slate-300">archive</span></label>
+                            <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="rule-op rounded border-slate-500 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0" value="list_labels"><span class="text-xs text-slate-300">list_labels</span></label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Contextual filters — visibility driven by which ops are checked -->
+                    <div id="filter-from" class="hidden">
+                      <label class="block text-sm text-slate-400 mb-1">From matches <span class="text-slate-600">(glob, e.g. *@company.com)</span></label>
+                      <input type="text" id="rule-from" placeholder="*@example.com"
+                             class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+
+                    <div id="filter-to" class="hidden">
+                      <label class="block text-sm text-slate-400 mb-1">To matches <span class="text-slate-600">(restrict who agent can email)</span></label>
+                      <input type="text" id="rule-to" placeholder="*@company.com"
+                             class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+
+                    <div id="filter-subject" class="hidden">
+                      <label class="block text-sm text-slate-400 mb-1">Subject contains</label>
+                      <input type="text" id="rule-subject" placeholder="keyword"
+                             class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+
+                    <div id="filter-content" class="hidden">
+                      <label class="block text-sm text-slate-400 mb-1">Content contains <span class="text-slate-600">(filters response content)</span></label>
+                      <input type="text" id="rule-content" placeholder="sensitive keyword"
+                             class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+
+                    <div id="filter-label" class="hidden">
+                      <label class="block text-sm text-slate-400 mb-1">Label <span class="text-slate-600">(only emails with this label are accessible)</span></label>
+                      <input type="text" id="rule-label" placeholder="project-x"
+                             class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right: Action -->
+                <div>
+                  <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Then (action)</p>
+
+                  <div class="space-y-3">
+                    <div class="space-y-2">
+                      <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="rule-action" value="allow" checked class="text-indigo-500 focus:ring-indigo-500 bg-slate-700 border-slate-500"><span class="text-sm text-slate-300">Allow</span></label>
+                      <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="rule-action" value="deny" class="text-indigo-500 focus:ring-indigo-500 bg-slate-700 border-slate-500"><span class="text-sm text-slate-300">Deny</span></label>
+                      <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="rule-action" value="require_approval" class="text-indigo-500 focus:ring-indigo-500 bg-slate-700 border-slate-500"><span class="text-sm text-slate-300">Require Approval</span></label>
+                      <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="rule-action" value="run_script" class="text-indigo-500 focus:ring-indigo-500 bg-slate-700 border-slate-500"><span class="text-sm text-slate-300">Run Script</span></label>
+                    </div>
+
+                    <!-- Script fields (shown when action=run_script) -->
+                    <div id="script-fields" class="hidden space-y-2 pl-6 border-l-2 border-blue-500/30">
+                      <p class="text-xs text-slate-500">A script receives the full request + response as JSON and decides everything: allow, deny, rewrite, redact. <a href="/docs/policy-scripts" class="text-indigo-400 hover:text-indigo-300 underline">Read the docs</a></p>
+                      <div>
+                        <label class="block text-sm text-slate-400 mb-1">Command</label>
+                        <input type="text" id="rule-script-cmd" placeholder="python3"
+                               class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                      </div>
+                      <div>
+                        <label class="block text-sm text-slate-400 mb-1">Script path</label>
+                        <input type="text" id="rule-script-path" placeholder="./policies/my_filter.py"
+                               class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                      </div>
+                    </div>
+
+                    <!-- Content modification fields (shown for allow/deny/approval, hidden for script) -->
+                    <div id="extras-section" class="pt-2 border-t border-slate-700 space-y-3">
+                      <div>
+                        <label class="block text-sm text-slate-400 mb-1">Exclude content <span class="text-slate-600">(remove items containing this text, post-phase)</span></label>
+                        <input type="text" id="rule-filter-exclude" placeholder="confidential"
+                               class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                      </div>
+
+                      <div>
+                        <label class="block text-sm text-slate-400 mb-1">Redact patterns <span class="text-slate-600">(regex, optional)</span></label>
+                        <input type="text" id="rule-redact" placeholder="\b\d{3}-\d{2}-\d{4}\b"
+                               class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                      </div>
+
+                      <div>
+                        <label class="block text-sm text-slate-400 mb-1">Reason <span class="text-slate-600">(optional)</span></label>
+                        <input type="text" id="rule-reason" placeholder="Why this rule exists"
+                               class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-3 mt-5">
+                    <button type="button" onclick="addRule()"
+                            class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                      </svg>
+                      Add
+                    </button>
+                    <button type="button" onclick="hideAddRuleForm()"
+                            class="inline-flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Default Action -->
+            <div class="flex items-center gap-4 mb-4 pt-2">
+              <label class="text-sm font-medium text-slate-400">Default action (when no rules match):</label>
+              <select id="default-action" class="rounded-lg bg-slate-900 border border-slate-600 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                <option value="deny">Deny</option>
+                <option value="allow">Allow</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit"
+                  class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Save Policy
+          </button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // --- Rule state ---
+    let rules = [];
+    var SCOPE = "{{.Scope}}";
+    let editingIndex = -1;
+
+    // --- Presets ---
+    const PRESETS = {
+      "read-only": {
+        default_action: "deny",
+        rules: [
+          { ops: ["list_emails", "read_email", "read_thread", "list_labels", "get_attachment"], phase: "pre", action: "allow", reason: "Allow all read operations" }
+        ]
+      },
+      "drafter": {
+        default_action: "deny",
+        rules: [
+          { ops: ["list_emails", "read_email", "read_thread", "list_labels", "get_attachment"], phase: "pre", action: "allow", reason: "Allow read operations" },
+          { ops: ["create_draft", "update_draft"], phase: "pre", action: "allow", reason: "Allow draft creation and editing" },
+          { ops: ["send_email", "send_draft", "reply"], phase: "pre", action: "deny", reason: "Block all sending" }
+        ]
+      },
+      "full-assist": {
+        default_action: "deny",
+        rules: [
+          { ops: ["list_emails", "read_email", "read_thread", "list_labels", "get_attachment"], phase: "pre", action: "allow", reason: "Allow read operations" },
+          { ops: ["create_draft", "update_draft"], phase: "pre", action: "allow", reason: "Allow drafts" },
+          { ops: ["send_email", "send_draft", "reply"], phase: "pre", action: "require_approval", reason: "Sending requires human approval" },
+          { ops: ["add_label", "remove_label", "archive"], phase: "pre", action: "allow", reason: "Allow organization" }
+        ]
+      },
+      "triage": {
+        default_action: "deny",
+        rules: [
+          { ops: ["list_emails", "read_email", "read_thread", "list_labels"], phase: "pre", action: "allow", reason: "Allow reading" },
+          { ops: ["add_label", "remove_label", "archive"], phase: "pre", action: "allow", reason: "Allow triage actions" },
+          { ops: ["create_draft", "update_draft", "send_email", "send_draft", "reply"], phase: "pre", action: "deny", reason: "No composing or sending" }
+        ]
+      }
+    };
+
+    // --- Action colors ---
+    const ACTION_COLORS = {
+      allow:            { border: "border-l-green-500",  bg: "bg-green-500/5",  badge: "bg-green-500/10 text-green-400" },
+      deny:             { border: "border-l-red-500",    bg: "bg-red-500/5",    badge: "bg-red-500/10 text-red-400" },
+      require_approval: { border: "border-l-yellow-500", bg: "bg-yellow-500/5", badge: "bg-yellow-500/10 text-yellow-400" },
+      run_script:       { border: "border-l-blue-500",   bg: "bg-blue-500/5",   badge: "bg-blue-500/10 text-blue-400" },
+      filter:           { border: "border-l-purple-500", bg: "bg-purple-500/5", badge: "bg-purple-500/10 text-purple-400" }
+    };
+
+    const ACTION_LABELS = {
+      allow: "Allow",
+      deny: "Deny",
+      require_approval: "Require Approval",
+      run_script: "Run Script",
+      filter: "Filter"
+    };
+
+    // --- Render ---
+    function renderRules() {
+      const list = document.getElementById("rules-list");
+      const empty = document.getElementById("empty-rules");
+
+      if (rules.length === 0) {
+        list.innerHTML = "";
+        empty.classList.remove("hidden");
+        return;
+      }
+      empty.classList.add("hidden");
+
+      list.innerHTML = rules.map(function(rule, i) {
+        const c = ACTION_COLORS[rule.action] || ACTION_COLORS.deny;
+        var opsText = rule.ops && rule.ops.length > 0 ? rule.ops.join(", ") : "any operation";
+        var condParts = [];
+        if (rule.from) condParts.push("from <strong>" + escHtml(rule.from) + "</strong>");
+        if (rule.to) condParts.push("to <strong>" + escHtml(rule.to) + "</strong>");
+        if (rule.subject) condParts.push("subject contains <strong>" + escHtml(rule.subject) + "</strong>");
+        if (rule.content) condParts.push("content contains <strong>" + escHtml(rule.content) + "</strong>");
+        if (rule.label) condParts.push("label <strong>" + escHtml(rule.label) + "</strong>");
+        const condText = condParts.length > 0 ? " and " + condParts.join(" and ") : "";
+
+        let extraInfo = "";
+        if (rule.action === "run_script" && rule.script_cmd) {
+          extraInfo = '<span class="text-slate-500 text-xs ml-2">(' + escHtml(rule.script_cmd) + " " + escHtml(rule.script_path || "") + ')</span>';
+        }
+        if (rule.filter_exclude) {
+          extraInfo += '<span class="text-slate-500 text-xs ml-2">(exclude: ' + escHtml(rule.filter_exclude) + ')</span>';
+        }
+        if (rule.redact) {
+          extraInfo += '<span class="text-slate-500 text-xs ml-2">[redact: ' + escHtml(rule.redact) + ']</span>';
+        }
+
+        const reasonHtml = rule.reason ? '<div class="text-xs text-slate-500 mt-1">' + escHtml(rule.reason) + '</div>' : '';
+
+        return '<div class="flex items-start gap-3 cursor-pointer ' + c.bg + ' border-l-4 ' + c.border + ' rounded-r-lg px-4 py-3" onclick="editRule(' + i + ')">' +
+          '<div class="flex-shrink-0 text-xs text-slate-600 font-mono pt-0.5">#' + (i + 1) + '</div>' +
+          '<div class="flex-1 min-w-0">' +
+            '<div class="text-sm text-slate-300">' +
+              '<span class="text-slate-500">IF</span> ' +
+              '<span class="text-slate-200">' + escHtml(opsText) + '</span>' +
+              condText +
+              ' <span class="text-slate-500">THEN</span> ' +
+              '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ' + c.badge + '">' + ACTION_LABELS[rule.action] + '</span>' +
+              extraInfo +
+            '</div>' +
+            reasonHtml +
+          '</div>' +
+          '<div class="flex items-center gap-2 flex-shrink-0">' +
+            '<button type="button" onclick="moveRule(' + i + ', -1)" class="text-slate-500 hover:text-slate-300 disabled:opacity-30" ' + (i === 0 ? 'disabled' : '') + '>' +
+              '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>' +
+            '</button>' +
+            '<button type="button" onclick="moveRule(' + i + ', 1)" class="text-slate-500 hover:text-slate-300 disabled:opacity-30" ' + (i === rules.length - 1 ? 'disabled' : '') + '>' +
+              '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>' +
+            '</button>' +
+            '<button type="button" onclick="removeRule(' + i + ')" class="text-red-400/60 hover:text-red-400">' +
+              '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    }
+
+    function escHtml(str) {
+      if (!str) return "";
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // --- Actions ---
+    function loadPreset() {
+      const sel = document.getElementById("preset-select");
+      const preset = PRESETS[sel.value];
+      if (!preset) return;
+      rules = JSON.parse(JSON.stringify(preset.rules));
+      document.getElementById("default-action").value = preset.default_action;
+      renderRules();
+    }
+
+    function showAddRuleForm() {
+      document.getElementById("add-rule-form").classList.remove("hidden");
+      document.getElementById("btn-add-rule").classList.add("hidden");
+      resetRuleForm();
+    }
+
+    function hideAddRuleForm() {
+      document.getElementById("add-rule-form").classList.add("hidden");
+      document.getElementById("btn-add-rule").classList.remove("hidden");
+      editingIndex = -1;
+      var addBtn = document.querySelector('#add-rule-form button[onclick="addRule()"]');
+      if (addBtn) addBtn.textContent = "Add";
+    }
+
+    function editRule(index) {
+      editingIndex = index;
+      var rule = rules[index];
+
+      // Show the add-rule form
+      showAddRuleForm();
+
+      // Populate operations checkboxes
+      document.querySelectorAll(".rule-op").forEach(function(cb) {
+        cb.checked = rule.ops && rule.ops.indexOf(cb.value) !== -1;
+      });
+      updateFiltersFromOps();
+
+      // Populate filters
+      document.getElementById("rule-from").value = rule.from || "";
+      document.getElementById("rule-to").value = rule.to || "";
+      document.getElementById("rule-subject").value = rule.subject || "";
+      document.getElementById("rule-content").value = rule.content || "";
+      document.getElementById("rule-label").value = rule.label || "";
+
+      // Populate action
+      var actionVal = rule.action;
+      if (actionVal === "require_approval") actionVal = "require_approval";
+      if (actionVal === "run_script") actionVal = "run_script";
+      var radio = document.querySelector('input[name="rule-action"][value="' + actionVal + '"]');
+      if (radio) radio.checked = true;
+
+      // Trigger action change to show/hide fields
+      radio && radio.dispatchEvent(new Event("change"));
+
+      // Populate extras
+      document.getElementById("rule-filter-exclude").value = rule.filter_exclude || "";
+      document.getElementById("rule-redact").value = rule.redact || "";
+      document.getElementById("rule-reason").value = rule.reason || "";
+
+      // Script fields
+      if (rule.action === "run_script") {
+        document.getElementById("rule-script-cmd").value = rule.script_cmd || "python3";
+        document.getElementById("rule-script-path").value = rule.script_path || "";
+      }
+
+      // Change the button text
+      var addBtn = document.querySelector('#add-rule-form button[onclick="addRule()"]');
+      if (addBtn) addBtn.textContent = "Update Rule";
+    }
+
+    function resetRuleForm() {
+      document.querySelectorAll(".rule-op").forEach(function(cb) { cb.checked = false; });
+      updateFiltersFromOps();
+      document.getElementById("rule-from").value = "";
+      document.getElementById("rule-to").value = "";
+      document.getElementById("rule-subject").value = "";
+      document.getElementById("rule-content").value = "";
+      document.getElementById("rule-label").value = "";
+      document.querySelector('input[name="rule-action"][value="allow"]').checked = true;
+      document.getElementById("rule-script-cmd").value = "";
+      document.getElementById("rule-script-path").value = "";
+      document.getElementById("rule-filter-exclude").value = "";
+      document.getElementById("rule-redact").value = "";
+      document.getElementById("rule-reason").value = "";
+      document.getElementById("script-fields").classList.add("hidden");
+      document.getElementById("extras-section").classList.remove("hidden");
+    }
+
+    function addRule() {
+      var ops = [];
+      document.querySelectorAll(".rule-op:checked").forEach(function(cb) { ops.push(cb.value); });
+      var action = document.querySelector('input[name="rule-action"]:checked').value;
+
+      var rule = {
+        ops: ops,
+        action: action
+      };
+
+      var from = document.getElementById("rule-from").value.trim();
+      var to = document.getElementById("rule-to").value.trim();
+      var subject = document.getElementById("rule-subject").value.trim();
+      var content = document.getElementById("rule-content").value.trim();
+      var label = document.getElementById("rule-label").value.trim();
+      var redact = document.getElementById("rule-redact").value.trim();
+      var reason = document.getElementById("rule-reason").value.trim();
+
+      if (from) rule.from = from;
+      if (to) rule.to = to;
+      if (subject) rule.subject = subject;
+      if (content) rule.content = content;
+      if (label) rule.label = label;
+      if (redact) rule.redact = redact;
+      if (reason) rule.reason = reason;
+
+      if (action === "run_script") {
+        rule.script_cmd = document.getElementById("rule-script-cmd").value.trim();
+        rule.script_path = document.getElementById("rule-script-path").value.trim();
+      } else {
+        var filterExclude = document.getElementById("rule-filter-exclude").value.trim();
+        if (filterExclude) {
+          rule.filter_exclude = filterExclude;
+          if (action === "allow") {
+            rule.action = "filter";
+          }
+        }
+      }
+
+      if (editingIndex >= 0) {
+        rules[editingIndex] = rule;
+        editingIndex = -1;
+      } else {
+        rules.push(rule);
+      }
+      renderRules();
+      hideAddRuleForm();
+    }
+
+    function removeRule(index) {
+      rules.splice(index, 1);
+      renderRules();
+    }
+
+    function moveRule(index, direction) {
+      const newIndex = index + direction;
+      if (newIndex < 0 || newIndex >= rules.length) return;
+      const tmp = rules[index];
+      rules[index] = rules[newIndex];
+      rules[newIndex] = tmp;
+      renderRules();
+    }
+
+    // --- Category to operations mapping ---
+    var CATEGORY_OPS = {
+      all: [],
+      read: ["list_emails", "read_email", "read_thread", "get_attachment"],
+      compose: ["create_draft", "update_draft", "reply"],
+      send: ["send_email", "send_draft"],
+      organize: ["add_label", "remove_label", "archive", "list_labels"],
+      custom: null
+    };
+
+    // Which filters each operation supports
+    var OP_FILTERS = {
+      list_emails:    ["filter-label", "filter-from", "filter-subject", "filter-content"],
+      read_email:     ["filter-label", "filter-from", "filter-subject", "filter-content"],
+      read_thread:    ["filter-label", "filter-from", "filter-subject", "filter-content"],
+      get_attachment:  ["filter-label"],
+      create_draft:   ["filter-to", "filter-subject"],
+      update_draft:   ["filter-to", "filter-subject"],
+      reply:          ["filter-to", "filter-subject", "filter-from"],
+      send_email:     ["filter-to", "filter-subject"],
+      send_draft:     [],
+      add_label:      ["filter-label"],
+      remove_label:   ["filter-label"],
+      archive:        ["filter-label"],
+      list_labels:    []
+    };
+    var ALL_FILTERS = ["filter-from", "filter-to", "filter-subject", "filter-content", "filter-label"];
+
+    function updateFiltersFromOps() {
+      var checked = [];
+      document.querySelectorAll(".rule-op:checked").forEach(function(cb) { checked.push(cb.value); });
+
+      if (checked.length === 0) {
+        // Nothing checked — hide all filters
+        ALL_FILTERS.forEach(function(id) { document.getElementById(id).classList.add("hidden"); });
+        return;
+      }
+
+      // Find filters common to ALL checked operations
+      var common = null;
+      checked.forEach(function(op) {
+        var opFilters = OP_FILTERS[op] || [];
+        if (common === null) {
+          common = opFilters.slice();
+        } else {
+          common = common.filter(function(f) { return opFilters.indexOf(f) !== -1; });
+        }
+      });
+
+      ALL_FILTERS.forEach(function(id) {
+        document.getElementById(id).classList.toggle("hidden", (common || []).indexOf(id) === -1);
+      });
+    }
+
+    // Listen for checkbox changes
+    document.getElementById("ops-checkboxes").addEventListener("change", updateFiltersFromOps);
+
+    // Initialize
+    updateFiltersFromOps();
+
+    // --- Toggle fields based on action type ---
+    document.querySelectorAll('input[name="rule-action"]').forEach(function(radio) {
+      radio.addEventListener("change", function() {
+        var isScript = this.value === "run_script";
+        var isAllow = this.value === "allow";
+        // Exclude/redact only meaningful for Allow
+        document.getElementById("extras-section").classList.toggle("hidden", !isAllow);
+        // Script fields only for scripts
+        document.getElementById("script-fields").classList.toggle("hidden", !isScript);
+      });
+    });
+
+    // --- Submit: transform UI rules to engine format ---
+    function prepareSubmit() {
+      var engineRules = rules.map(function(r) {
+        var rule = { action: r.action };
+        if (r.reason) rule.reason = r.reason;
+        if (r.filter_exclude) rule.filter_exclude = r.filter_exclude;
+        if (r.redact) rule.redact_patterns = [r.redact];
+
+        // Script action
+        if (r.action === "run_script") {
+          rule.action = "script";
+          rule.script = {
+            command: r.script_cmd || "python3",
+            path: r.script_path || "",
+            timeout: "5s"
+          };
+          return rule;
+        }
+
+        // Build match conditions
+        var match = {};
+        if (r.ops && r.ops.length > 0) match.operations = r.ops;
+        if (r.phase && r.phase !== "pre") match.phase = r.phase;
+        if (r.from) match.from = [r.from];
+        if (r.subject) match.subject_contains = [r.subject];
+        if (r.label) match.labels = [r.label];
+        if (r.content) { match.content_contains = r.content; match.phase = "post"; }
+
+        if (Object.keys(match).length > 0) rule.match = match;
+        return rule;
+      });
+
+      var config = {
+        scope: SCOPE,
+        default_action: document.getElementById("default-action").value,
+        rules: engineRules
+      };
+      document.getElementById("policy_config").value = JSON.stringify(config);
+      return true;
+    }
+
+    // Load existing rules from the policy config
+    (function() {
+      var existingConfig = {{json .Policy.PolicyConfig}};
+      if (existingConfig && existingConfig.rules) {
+        // Transform engine format rules back to UI format
+        existingConfig.rules.forEach(function(r) {
+          var uiRule = { action: r.action || "allow" };
+          if (r.reason) uiRule.reason = r.reason;
+          if (r.filter_exclude) uiRule.filter_exclude = r.filter_exclude;
+          if (r.redact_patterns && r.redact_patterns.length) uiRule.redact = r.redact_patterns[0];
+          if (r.action === "script" && r.script) {
+            uiRule.action = "run_script";
+            uiRule.script_cmd = r.script.command || "python3";
+            uiRule.script_path = r.script.path || "";
+          }
+          if (r.match) {
+            if (r.match.operations) uiRule.ops = r.match.operations;
+            if (r.match.phase) uiRule.phase = r.match.phase;
+            if (r.match.from && r.match.from.length) uiRule.from = r.match.from[0];
+            if (r.match.subject_contains && r.match.subject_contains.length) uiRule.subject = r.match.subject_contains[0];
+            if (r.match.content_contains) uiRule.content = r.match.content_contains;
+            if (r.match.labels && r.match.labels.length) uiRule.label = r.match.labels[0];
+          }
+          // Map engine action names to UI action names
+          if (uiRule.action === "approval_required") uiRule.action = "require_approval";
+          rules.push(uiRule);
+        });
+        renderRules();
+      }
+      // Set default action from existing config
+      if (existingConfig && existingConfig.default_action) {
+        document.getElementById("default-action").value = existingConfig.default_action;
+      }
+    })();
+  </script>
+</body>
+</html>
+{{end}}

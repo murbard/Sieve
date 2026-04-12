@@ -1,0 +1,174 @@
+{{define "nav"}}
+<nav class="fixed top-0 left-0 h-full w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
+  <div class="p-6 border-b border-slate-700">
+    <a href="/" class="flex items-center gap-3">
+      <div class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+        </svg>
+      </div>
+      <span class="text-xl font-bold text-white tracking-tight">Sieve</span>
+    </a>
+  </div>
+  <div class="flex-1 py-4 overflow-y-auto">
+    <ul class="space-y-1 px-3">
+
+      <!-- Connections (collapsible) -->
+      <li>
+        <button onclick="toggleSub('conn-sub')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {{if eq .Active "connections"}}bg-indigo-500/20 text-indigo-400{{else}}text-slate-300 hover:bg-slate-700 hover:text-white{{end}}">
+          <span class="flex items-center gap-3">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+            </svg>
+            <a href="/connections" class="hover:underline" onclick="event.stopPropagation()">Connections</a>
+          </span>
+          <svg id="conn-sub-chevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <ul id="conn-sub" class="ml-8 mt-1 space-y-0.5 hidden">
+          <li><a href="/connections?type=google" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-google"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Google</a></li>
+          <li><a href="/connections?type=cloud" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-cloud"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Cloud</a></li>
+          <li><a href="/connections?type=llm" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-llm"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">LLM API</a></li>
+          <li><a href="/connections?type=http_proxy" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-http_proxy"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">HTTP Proxy</a></li>
+        </ul>
+      </li>
+
+      <!-- Tokens -->
+      <li>
+        <a href="/tokens" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {{if eq .Active "tokens"}}bg-indigo-500/20 text-indigo-400{{else}}text-slate-300 hover:bg-slate-700 hover:text-white{{end}}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+          </svg>
+          Tokens
+        </a>
+      </li>
+
+      <!-- Policies (collapsible with nested Google) -->
+      <li>
+        <button onclick="toggleSub('policy-sub')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {{if eq .Active "policies"}}bg-indigo-500/20 text-indigo-400{{else}}text-slate-300 hover:bg-slate-700 hover:text-white{{end}}">
+          <span class="flex items-center gap-3">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            <a href="/policies" class="hover:underline" onclick="event.stopPropagation()">Policies</a>
+          </span>
+          <svg id="policy-sub-chevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <ul id="policy-sub" class="ml-8 mt-1 space-y-0.5 hidden">
+          <!-- Google (collapsible sub-group) -->
+          <li>
+            <button onclick="toggleSub('google-sub'); event.stopPropagation()" class="w-full flex items-center justify-between px-3 py-1 rounded-lg text-xs transition-colors text-slate-400 hover:text-slate-200 hover:bg-slate-700/50">
+              <span>Google</span>
+              <svg id="google-sub-chevron" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <ul id="google-sub" class="ml-3 space-y-0.5 hidden">
+              <li><a href="/policies?scope=gmail" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "policies-gmail"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Gmail</a></li>
+              <li><a href="/policies?scope=drive" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "policies-drive"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Drive</a></li>
+              <li><a href="/policies?scope=calendar" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "policies-calendar"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Calendar</a></li>
+              <li><a href="/policies?scope=people" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "policies-people"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">People</a></li>
+              <li><a href="/policies?scope=sheets" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "policies-sheets"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Sheets</a></li>
+              <li><a href="/policies?scope=docs" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "policies-docs"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Docs</a></li>
+            </ul>
+          </li>
+          <!-- Cloud (AWS + Hyperstack) -->
+          <li>
+            <button onclick="toggleSub('cloud-sub'); event.stopPropagation()" class="w-full flex items-center justify-between px-3 py-1 rounded-lg text-xs transition-colors text-slate-400 hover:text-slate-200 hover:bg-slate-700/50">
+              <span>Cloud</span>
+              <svg id="cloud-sub-chevron" class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <ul id="cloud-sub" class="ml-3 space-y-0.5 hidden">
+              <li>
+                <button onclick="toggleSub('aws-sub'); event.stopPropagation()" class="w-full flex items-center justify-between px-3 py-0.5 rounded-lg text-[10px] transition-colors text-slate-500 hover:text-slate-300">
+                  <span>AWS</span>
+                  <svg id="aws-sub-chevron" class="w-2.5 h-2.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <ul id="aws-sub" class="ml-3 space-y-0.5 hidden">
+                  <li><a href="/policies?scope=aws-ec2" class="block px-3 py-0.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-aws-ec2"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">EC2</a></li>
+                  <li><a href="/policies?scope=aws-s3" class="block px-3 py-0.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-aws-s3"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">S3</a></li>
+                  <li><a href="/policies?scope=aws-lambda" class="block px-3 py-0.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-aws-lambda"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Lambda</a></li>
+                  <li><a href="/policies?scope=aws-ses" class="block px-3 py-0.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-aws-ses"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">SES</a></li>
+                  <li><a href="/policies?scope=aws-dynamodb" class="block px-3 py-0.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-aws-dynamodb"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">DynamoDB</a></li>
+                </ul>
+              </li>
+              <li><a href="/policies?scope=hyperstack" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "policies-hyperstack"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Hyperstack</a></li>
+            </ul>
+          </li>
+          <li><a href="/policies?scope=llm" class="block px-3 py-1.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-llm"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">LLM API</a></li>
+          <li><a href="/policies?scope=http_proxy" class="block px-3 py-1.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-http_proxy"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">HTTP Proxy</a></li>
+        </ul>
+      </li>
+
+      <!-- Approvals -->
+      <li>
+        <a href="/approvals" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {{if eq .Active "approvals"}}bg-indigo-500/20 text-indigo-400{{else}}text-slate-300 hover:bg-slate-700 hover:text-white{{end}}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Approvals
+        </a>
+      </li>
+
+      <!-- Audit Log -->
+      <li>
+        <a href="/audit" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {{if eq .Active "audit"}}bg-indigo-500/20 text-indigo-400{{else}}text-slate-300 hover:bg-slate-700 hover:text-white{{end}}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          Audit Log
+        </a>
+      </li>
+
+      <!-- Settings -->
+      <li>
+        <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {{if eq .Active "settings"}}bg-indigo-500/20 text-indigo-400{{else}}text-slate-300 hover:bg-slate-700 hover:text-white{{end}}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Settings
+        </a>
+      </li>
+    </ul>
+  </div>
+  <div class="p-4 border-t border-slate-700">
+    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2 px-3">Docs</p>
+    <ul class="space-y-1 px-3">
+      <li><a href="/docs/gmail-api" class="text-xs text-slate-400 hover:text-indigo-400 transition-colors">Gmail REST API</a></li>
+      <li><a href="/docs/policy-scripts" class="text-xs text-slate-400 hover:text-indigo-400 transition-colors">Policy Scripts</a></li>
+    </ul>
+  </div>
+</nav>
+
+<script>
+function toggleSub(id) {
+  var el = document.getElementById(id);
+  var chevron = document.getElementById(id + '-chevron');
+  if (el.classList.contains('hidden')) {
+    el.classList.remove('hidden');
+    if (chevron) chevron.style.transform = 'rotate(180deg)';
+  } else {
+    el.classList.add('hidden');
+    if (chevron) chevron.style.transform = '';
+  }
+}
+
+// Auto-expand sections that have active sub-items.
+(function() {
+  var active = "{{.Active}}";
+  if (active.startsWith("connections-")) {
+    toggleSub('conn-sub');
+  }
+  if (active.startsWith("policies-")) {
+    toggleSub('policy-sub');
+    if (active === "policies-gmail" || active === "policies-drive" || active === "policies-calendar" || active === "policies-people" || active === "policies-sheets" || active === "policies-docs") {
+      toggleSub('google-sub');
+    }
+    if (active.startsWith("policies-aws-") || active === "policies-hyperstack") {
+      toggleSub('cloud-sub');
+      if (active.startsWith("policies-aws-")) {
+        toggleSub('aws-sub');
+      }
+    }
+  }
+})();
+</script>
+{{end}}

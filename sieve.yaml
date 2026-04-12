@@ -1,0 +1,11 @@
+server:
+  host: "0.0.0.0"
+  api_port: 19817
+  ui_port: 19816
+database:
+  path: "./data/sieve.db"
+connectors:
+  google:
+    client_credentials_file: "./data/gmail_credentials.json"
+policy:
+  scripts_dir: "./policies"

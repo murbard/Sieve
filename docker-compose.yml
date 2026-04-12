@@ -1,0 +1,18 @@
+services:
+  sieve:
+    build: .
+    ports:
+      - "127.0.0.1:19816:19816"  # Web UI
+      - "127.0.0.1:19817:19817"  # API + MCP
+    volumes:
+      - sieve-data:/data
+      - ./policies:/policies:ro
+      - ./sieve.yaml:/etc/sieve/sieve.yaml:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+volumes:
+  sieve-data:

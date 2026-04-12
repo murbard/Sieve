@@ -1,0 +1,112 @@
+{{define "approvals"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Approvals - Sieve</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  {{template "nav" .}}
+
+  <main class="ml-64 p-8">
+    <div class="max-w-5xl">
+      <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-white">Pending Approvals</h1>
+        <div class="flex items-center gap-2 text-sm text-slate-500">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+          </span>
+          Auto-refreshing every 5s
+        </div>
+      </div>
+
+      <div id="approval-list"
+           hx-get="/approvals"
+           hx-trigger="every 5s"
+           hx-select="#approval-list"
+           hx-target="#approval-list"
+           hx-swap="outerHTML">
+
+        {{if .Approvals}}
+        <div class="space-y-4">
+          {{range .Approvals}}
+          <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20">
+                  Pending
+                </span>
+                <span class="text-sm text-slate-400">{{timeAgo .CreatedAt}}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <form method="POST" action="/approvals/{{.ID}}/approve" class="inline">
+                  <button type="submit"
+                          class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-800">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Approve
+                  </button>
+                </form>
+                <form method="POST" action="/approvals/{{.ID}}/reject" class="inline">
+                  <button type="submit"
+                          class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-800">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    Reject
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Token</p>
+                <p class="text-sm text-white font-mono">{{truncate 16 .TokenID}}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Connection</p>
+                <p class="text-sm text-white">{{.ConnectionID}}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Operation</p>
+                <p class="text-sm text-white">
+                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-indigo-500/10 text-indigo-400 ring-1 ring-indigo-500/20">
+                    {{.Operation}}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            {{if .RequestData}}
+            <div>
+              <p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Request Data</p>
+              <pre class="bg-slate-900 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 font-mono overflow-x-auto max-h-48 overflow-y-auto">{{json .RequestData}}</pre>
+            </div>
+            {{end}}
+          </div>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-12 text-center">
+          <svg class="w-12 h-12 text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <h3 class="text-lg font-medium text-slate-400 mb-1">All clear</h3>
+          <p class="text-sm text-slate-500">No pending approvals. New items will appear here automatically.</p>
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </main>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,116 @@
+{{define "audit"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sieve - Audit Log</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-slate-900 min-h-screen">
+  {{template "nav" .}}
+
+  <main class="ml-64 p-8">
+    <h1 class="text-2xl font-bold text-white mb-6">Audit Log</h1>
+
+    <!-- Filters -->
+    <form method="GET" action="/audit" class="bg-slate-800 rounded-lg p-4 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-400 mb-1">Token ID</label>
+          <input type="text" name="token_id" value="{{.TokenID}}"
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm"
+            placeholder="Filter by token...">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-400 mb-1">Connection</label>
+          <input type="text" name="connection_id" value="{{.ConnectionID}}"
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm"
+            placeholder="Filter by connection...">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-400 mb-1">Operation</label>
+          <input type="text" name="operation" value="{{.Operation}}"
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm"
+            placeholder="Filter by operation...">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-400 mb-1">After</label>
+          <input type="date" name="after" value="{{.After}}"
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm">
+        </div>
+        <div class="flex items-end">
+          <button type="submit"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded text-sm">
+            Filter
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Audit Table -->
+    <div class="bg-slate-800 rounded-lg overflow-hidden">
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-slate-700">
+            <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Time</th>
+            <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Token</th>
+            <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Connection</th>
+            <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Operation</th>
+            <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Result</th>
+            <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Entries}}
+          <tr class="border-b border-slate-700/50 hover:bg-slate-700/30">
+            <td class="px-4 py-3 text-sm text-slate-300">{{timeAgo .Timestamp}}</td>
+            <td class="px-4 py-3 text-sm text-slate-300">{{truncate 20 .TokenName}}</td>
+            <td class="px-4 py-3 text-sm text-slate-300">{{.ConnectionID}}</td>
+            <td class="px-4 py-3">
+              <span class="text-sm font-mono text-blue-400">{{.Operation}}</span>
+            </td>
+            <td class="px-4 py-3">
+              {{if eq .PolicyResult "allow"}}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900 text-green-300">allow</span>
+              {{else if eq .PolicyResult "deny"}}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900 text-red-300">deny</span>
+              {{else}}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-900 text-yellow-300">{{.PolicyResult}}</span>
+              {{end}}
+            </td>
+            <td class="px-4 py-3 text-sm text-slate-400">{{.DurationMs}}ms</td>
+          </tr>
+          {{else}}
+          <tr>
+            <td colspan="6" class="px-4 py-8 text-center text-slate-500">No audit entries found.</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {{if gt .TotalPages 1}}
+    <div class="flex justify-between items-center mt-4">
+      <div class="text-sm text-slate-400">
+        Page {{.Page}} of {{.TotalPages}} ({{.Total}} total entries)
+      </div>
+      <div class="flex gap-2">
+        {{if gt .Page 1}}
+        <a href="/audit?page={{subtract .Page 1}}&token_id={{.TokenID}}&connection_id={{.ConnectionID}}&operation={{.Operation}}"
+          class="px-3 py-1 bg-slate-700 rounded text-sm text-white hover:bg-slate-600">Prev</a>
+        {{end}}
+        {{if lt .Page .TotalPages}}
+        <a href="/audit?page={{add .Page 1}}&token_id={{.TokenID}}&connection_id={{.ConnectionID}}&operation={{.Operation}}"
+          class="px-3 py-1 bg-slate-700 rounded text-sm text-white hover:bg-slate-600">Next</a>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+  </main>
+</body>
+</html>
+{{end}}
