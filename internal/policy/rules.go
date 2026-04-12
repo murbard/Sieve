@@ -7,16 +7,9 @@
 // determines the outcome. If no rule matches, the configured default action
 // (typically "deny") applies.
 //
-// Rules operate in two phases:
-//   - "pre" phase: evaluated BEFORE the connector executes the operation.
-//     Used for access control (allow/deny/approval_required).
-//   - "post" phase: evaluated AFTER execution, with the response available
-//     in metadata. Used for content filtering, redaction, and output-based
-//     deny decisions.
-//
-// This two-phase design means a policy can allow an agent to read emails but
-// redact sensitive content from the response, or deny forwarding responses
-// that contain certain keywords — decisions that require seeing the actual data.
+// Rules are evaluated in a single pre-execution phase. Post-execution content
+// filtering is handled via ResponseFilter objects that are collected during
+// evaluation and applied by the caller after the operation executes.
 //
 // Match conditions within a single rule use AND logic: all specified conditions
 // must be true for the rule to fire. An empty match block matches everything,
@@ -46,13 +39,17 @@ type Rule struct {
 	// Script config — only for action="script".
 	Script *ScriptAction `json:"script,omitempty"`
 
-	// RedactPatterns — regex patterns to redact from response content.
-	// Applied when action is "allow" or "filter".
+	// FilterExclude — KEPT for backward compatibility. Translates to a
+	// ResponseFilter with ExcludeContaining at evaluation time.
+	FilterExclude string `json:"filter_exclude,omitempty"`
+
+	// RedactPatterns — KEPT for backward compatibility. Translates to a
+	// ResponseFilter with RedactPatterns at evaluation time.
 	RedactPatterns []string `json:"redact_patterns,omitempty"`
 
-	// FilterExclude — for action="filter" on post-phase: remove items
-	// from list responses where any field contains this string.
-	FilterExclude string `json:"filter_exclude,omitempty"`
+	// ResponseFilter — per-rule post-processing applied after execution
+	// when this rule matches with "allow".
+	ResponseFilter *ResponseFilter `json:"response_filter,omitempty"`
 }
 
 // RuleMatch defines conditions for a rule to fire.
@@ -89,8 +86,10 @@ type ScriptAction struct {
 
 // RulesConfig is the config for the rules evaluator.
 type RulesConfig struct {
-	Rules         []Rule `json:"rules"`
-	DefaultAction string `json:"default_action"` // "allow" or "deny", default "deny"
+	Rules           []Rule           `json:"rules"`
+	DefaultAction   string           `json:"default_action"` // "allow" or "deny", default "deny"
+	Scope           string           `json:"scope,omitempty"`
+	ResponseFilters []ResponseFilter `json:"response_filters,omitempty"` // global post-processing filters
 }
 
 // RulesEvaluator evaluates an ordered list of rules using first-match-wins
@@ -141,28 +140,26 @@ func NewRulesEvaluator(config map[string]any, providers map[string]LLMProviderCo
 func (r *RulesEvaluator) Type() string { return "rules" }
 
 // Evaluate iterates rules top to bottom. First matching rule wins.
+// Rules always evaluate in pre-execution mode. Post-execution content
+// filtering is handled via ResponseFilter objects attached to the decision.
 func (r *RulesEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*PolicyDecision, error) {
-	phase := req.Phase
-	if phase == "" {
-		phase = "pre"
-	}
-
 	// First-match-wins: iterate rules in order. The first rule whose conditions
 	// all match determines the decision. This makes rule ordering critical —
 	// more specific rules must come before broader catch-all rules.
 	for i, rule := range r.config.Rules {
-		if !r.matches(&rule, req, phase) {
+		if !r.matches(&rule, req) {
 			continue
 		}
 
 		// This rule matched — its action is authoritative.
 		switch rule.Action {
-		case "allow":
+		case "allow", "filter":
 			decision := &PolicyDecision{
 				Action: "allow",
 				Reason: rule.Reason,
 			}
 			r.applyRedactions(decision, i, req)
+			r.collectFilters(decision, &rule)
 			return decision, nil
 
 		case "deny":
@@ -197,63 +194,54 @@ func (r *RulesEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*Pol
 			}
 			return eval.Evaluate(ctx, req)
 
-		case "filter":
-			// Filter actions only make sense in the post phase because they
-			// operate on the actual response content. If encountered in pre
-			// phase, skip to the next rule rather than erroring — this allows
-			// a single rule list to contain both pre and post rules naturally.
-			if phase != "post" {
-				continue
-			}
-			response, _ := req.Metadata["response"].(string)
-			if response == "" {
-				return &PolicyDecision{Action: "allow"}, nil
-			}
-			rewritten, reason := r.filterResponse(response, rule.FilterExclude)
-			decision := &PolicyDecision{
-				Action:  "allow",
-				Reason:  reason,
-				Rewrite: rewritten,
-			}
-			r.applyRedactions(decision, i, req)
-			return decision, nil
-
 		default:
 			// Unknown action, skip to next rule.
 			continue
 		}
 	}
 
-	// No rule matched. In pre-phase, use the configured default (typically
-	// "deny" for fail-closed security). In post-phase, default to "allow"
-	// (pass through the response unchanged) — post-phase rules are opt-in
-	// content filters, not gatekeepers.
-	if phase == "post" {
-		return &PolicyDecision{Action: "allow", Reason: "no post-phase rules"}, nil
-	}
+	// No rule matched — use the configured default (typically "deny" for
+	// fail-closed security).
 	return &PolicyDecision{
 		Action: r.config.DefaultAction,
 		Reason: "default policy",
 	}, nil
 }
 
+// collectFilters gathers ResponseFilter objects from a matched rule and from
+// the global config, attaching them to the decision for post-execution use.
+func (r *RulesEvaluator) collectFilters(decision *PolicyDecision, rule *Rule) {
+	// Per-rule ResponseFilter (new style).
+	if rule.ResponseFilter != nil {
+		decision.Filters = append(decision.Filters, *rule.ResponseFilter)
+	}
+
+	// Legacy backward-compat: translate FilterExclude into a ResponseFilter.
+	if rule.FilterExclude != "" {
+		decision.Filters = append(decision.Filters, ResponseFilter{
+			ExcludeContaining: rule.FilterExclude,
+		})
+	}
+
+	// Legacy backward-compat: translate RedactPatterns into a ResponseFilter.
+	if len(rule.RedactPatterns) > 0 {
+		decision.Filters = append(decision.Filters, ResponseFilter{
+			RedactPatterns: rule.RedactPatterns,
+		})
+	}
+
+	// Global response filters from the config.
+	decision.Filters = append(decision.Filters, r.config.ResponseFilters...)
+}
+
 // matches checks if a rule's conditions all match the request. All specified
 // conditions must be true (AND logic). This means adding more conditions to a
 // rule makes it narrower, not broader. A nil match block matches everything,
 // useful for default/catch-all rules.
-func (r *RulesEvaluator) matches(rule *Rule, req *PolicyRequest, phase string) bool {
+func (r *RulesEvaluator) matches(rule *Rule, req *PolicyRequest) bool {
 	m := rule.Match
 	if m == nil {
 		return true // no conditions = match everything
-	}
-
-	// Phase check.
-	rulePhase := m.Phase
-	if rulePhase == "" {
-		rulePhase = "pre"
-	}
-	if rulePhase != phase {
-		return false
 	}
 
 	// Operation check.
@@ -413,59 +401,3 @@ func (r *RulesEvaluator) applyRedactions(decision *PolicyDecision, ruleIdx int, 
 	}
 }
 
-// filterResponse removes items from a JSON list response where any field
-// contains the exclude string. This enables policies like "don't show the agent
-// any emails from legal@" — the items are silently removed from the list and
-// the total count is adjusted so the agent sees a consistent response.
-func (r *RulesEvaluator) filterResponse(response string, exclude string) (string, string) {
-	if exclude == "" {
-		return response, ""
-	}
-
-	excludeLower := strings.ToLower(exclude)
-
-	var data map[string]any
-	if err := json.Unmarshal([]byte(response), &data); err != nil {
-		// Not JSON, check the whole response.
-		if strings.Contains(strings.ToLower(response), excludeLower) {
-			return "", fmt.Sprintf("response filtered: contains %q", exclude)
-		}
-		return response, ""
-	}
-
-	// Handle list formats: {"emails": [...]}, {"messages": [...]}, {"items": [...]}
-	for _, key := range []string{"emails", "messages", "items", "threads", "results"} {
-		items, ok := data[key].([]any)
-		if !ok {
-			continue
-		}
-
-		var filtered []any
-		removed := 0
-		for _, item := range items {
-			itemJSON, _ := json.Marshal(item)
-			if strings.Contains(strings.ToLower(string(itemJSON)), excludeLower) {
-				removed++
-			} else {
-				filtered = append(filtered, item)
-			}
-		}
-
-		if removed > 0 {
-			data[key] = filtered
-			if total, ok := data["total"].(float64); ok {
-				data["total"] = total - float64(removed)
-			}
-			// Clear pagination token to prevent side-channel leakage.
-			// Without this, an agent could infer how many items were filtered
-			// by comparing the visible count with the pagination behavior.
-			for _, ptKey := range []string{"next_page_token", "nextPageToken"} {
-				delete(data, ptKey)
-			}
-			rewritten, _ := json.Marshal(data)
-			return string(rewritten), fmt.Sprintf("filtered %d item(s) containing %q", removed, exclude)
-		}
-	}
-
-	return response, ""
-}

@@ -28,6 +28,7 @@ func (c *CompositeEvaluator) Type() string { return "composite" }
 func (c *CompositeEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*PolicyDecision, error) {
 	var (
 		allRedactions    []Redaction
+		allFilters       []ResponseFilter
 		approvalRequired bool
 		reasons          []string
 		rewrite          string
@@ -57,6 +58,10 @@ func (c *CompositeEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (
 				reasons = append(reasons, decision.Reason)
 			}
 		default:
+			// Collect filters from sub-evaluators that return "allow".
+			if len(decision.Filters) > 0 {
+				allFilters = append(allFilters, decision.Filters...)
+			}
 			if decision.Reason != "" {
 				reasons = append(reasons, decision.Reason)
 			}
@@ -73,5 +78,6 @@ func (c *CompositeEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (
 		Reason:     strings.Join(reasons, "; "),
 		Redactions: allRedactions,
 		Rewrite:    rewrite,
+		Filters:    allFilters,
 	}, nil
 }

@@ -2,16 +2,15 @@
 //
 // MCP is the protocol AI agents (e.g., Claude) use to discover and invoke tools.
 // This server exposes connector operations as MCP tools, with every tool call
-// passing through a two-phase policy pipeline:
+// passing through the policy pipeline:
 //
 //  1. Pre-execution check: Before the connector runs, the policy evaluator
 //     decides whether the operation is allowed, denied, or requires human
 //     approval. This is the primary access-control gate.
 //
-//  2. Post-execution check: After the connector returns data, the policy
-//     evaluator gets a second pass with the actual response content. This
-//     enables content filtering, redaction, and output-based deny decisions
-//     that can only be made once the data is visible.
+//  2. Response filtering: After the connector returns data, any ResponseFilter
+//     objects collected during evaluation are applied to the response. This
+//     enables content filtering and redaction without a second evaluation pass.
 //
 // The approval flow is non-blocking for MCP clients: when approval is required,
 // the server returns immediately with an approval ID and URL. The agent can
@@ -486,55 +485,12 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, tok *tokens.Token,
 		resultJSON = []byte(fmt.Sprintf("%v", result))
 	}
 
-	// Phase 2: Post-execution policy check. Now that we have the actual
-	// response content, give the policy a second pass to filter, redact, or
-	// deny based on what the connector returned. Phase is set explicitly to
-	// "post" on the struct (not in metadata) to prevent agents from spoofing it.
-	postReq := &policy.PolicyRequest{
-		Operation:  opName,
-		Connection: connID,
-		Connector:  conn.ConnectorType,
-		Params:     call.Arguments,
-		Phase:      "post",
-		Metadata: map[string]any{
-			"phase":    "post",
-			"response": string(resultJSON),
-		},
-	}
-	postDecision, err := evaluator.Evaluate(ctx, postReq)
-	if err != nil {
-		// Fail-closed: any error in post-execution policy evaluation is treated
-		// as a deny. This prevents data leakage if the policy engine is misconfigured.
-		durationMs = time.Since(start).Milliseconds()
-		s.logAudit(tok, connID, opName, call.Arguments, "deny_post", fmt.Sprintf("post-execution policy error: %v", err), durationMs)
-		return &JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      id,
-			Result: ToolCallResult{
-				Content: []ContentBlock{{Type: "text", Text: "Blocked by policy"}},
-				IsError: true,
-			},
-		}
-	}
-	if postDecision.Action == "deny" {
-		durationMs = time.Since(start).Milliseconds()
-		s.logAudit(tok, connID, opName, call.Arguments, "deny_post", postDecision.Reason, durationMs)
-		return &JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      id,
-			Result: ToolCallResult{
-				Content: []ContentBlock{{Type: "text", Text: "Filtered by policy: " + postDecision.Reason}},
-				IsError: true,
-			},
-		}
+	// Apply response filters collected during pre-execution evaluation.
+	var reason string
+	if len(decision.Filters) > 0 {
+		resultJSON, reason = policy.ApplyResponseFilters(resultJSON, decision.Filters)
 	}
 
-	// If the policy rewrote the response, use the rewritten version.
-	if postDecision.Rewrite != "" {
-		resultJSON = []byte(postDecision.Rewrite)
-	}
-
-	reason := postDecision.Reason
 	s.logAudit(tok, connID, opName, call.Arguments, "allow", reason, durationMs)
 
 	return &JSONRPCResponse{

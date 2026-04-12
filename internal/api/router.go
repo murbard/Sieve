@@ -251,11 +251,9 @@ func (rt *Router) executeOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resultJSON, _ := json.Marshal(result)
-		resultJSON, reason, denied := rt.postPolicyCheck(r.Context(), evaluator, conn.Type(), connID, operation, params, resultJSON)
-		if denied {
-			rt.logAudit(tok, connID, operation, params, "deny_post", reason, time.Since(start).Milliseconds())
-			writeError(w, http.StatusForbidden, "filtered by policy")
-			return
+		var reason string
+		if len(decision.Filters) > 0 {
+			resultJSON, reason = policy.ApplyResponseFilters(resultJSON, decision.Filters)
 		}
 		rt.logAudit(tok, connID, operation, params, "allow", reason, time.Since(start).Milliseconds())
 		w.Header().Set("Content-Type", "application/json")
@@ -298,13 +296,11 @@ func (rt *Router) executeOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resultJSON, _ := json.Marshal(result)
-		resultJSON, reason, denied := rt.postPolicyCheck(r.Context(), evaluator, conn.Type(), connID, operation, params, resultJSON)
-		if denied {
-			rt.logAudit(tok, connID, operation, params, "deny_post", reason, time.Since(start).Milliseconds())
-			writeError(w, http.StatusForbidden, "filtered by policy")
-			return
+		var approvedReason string
+		if len(decision.Filters) > 0 {
+			resultJSON, approvedReason = policy.ApplyResponseFilters(resultJSON, decision.Filters)
 		}
-		rt.logAudit(tok, connID, operation, params, "approved", reason, time.Since(start).Milliseconds())
+		rt.logAudit(tok, connID, operation, params, "approved", approvedReason, time.Since(start).Milliseconds())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(resultJSON)
@@ -324,33 +320,6 @@ func (rt *Router) getEvaluator(role *roles.Role, connID string) (policy.Evaluato
 	return rt.policies.BuildEvaluator(policyIDs)
 }
 
-// postPolicyCheck runs the post-execution policy evaluation. Returns the
-// (potentially rewritten) result JSON and a deny reason if blocked.
-// This mirrors the two-phase check in the MCP server.
-func (rt *Router) postPolicyCheck(ctx context.Context, evaluator policy.Evaluator, connType, connID, operation string, params map[string]any, resultJSON []byte) ([]byte, string, bool) {
-	postReq := &policy.PolicyRequest{
-		Operation:  operation,
-		Connection: connID,
-		Connector:  connType,
-		Params:     params,
-		Phase:      "post",
-		Metadata: map[string]any{
-			"phase":    "post",
-			"response": string(resultJSON),
-		},
-	}
-	postDecision, err := evaluator.Evaluate(ctx, postReq)
-	if err != nil {
-		return nil, "post-execution policy error", true
-	}
-	if postDecision.Action == "deny" {
-		return nil, postDecision.Reason, true
-	}
-	if postDecision.Rewrite != "" {
-		resultJSON = []byte(postDecision.Rewrite)
-	}
-	return resultJSON, postDecision.Reason, false
-}
 
 // handleProxy is the transparent HTTP proxy handler. It extracts the connection
 // alias and path from the URL, validates the token has access, and delegates
@@ -683,13 +652,11 @@ func (rt *Router) gmailExecute(w http.ResponseWriter, r *http.Request, operation
 		return
 	}
 
-	// Post-execution policy check — same two-phase pipeline as MCP.
+	// Apply response filters collected during pre-execution evaluation.
 	resultJSON, _ := json.Marshal(result)
-	resultJSON, reason, denied := rt.postPolicyCheck(r.Context(), evaluator, "google", connID, operation, params, resultJSON)
-	if denied {
-		rt.logAudit(tok, connID, operation, params, "deny_post", reason, time.Since(start).Milliseconds())
-		writeError(w, http.StatusForbidden, "filtered by policy")
-		return
+	var reason string
+	if len(decision.Filters) > 0 {
+		resultJSON, reason = policy.ApplyResponseFilters(resultJSON, decision.Filters)
 	}
 
 	rt.logAudit(tok, connID, operation, params, "allow", reason, time.Since(start).Milliseconds())
