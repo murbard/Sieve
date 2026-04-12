@@ -224,7 +224,13 @@ func (r *RulesEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*Pol
 		}
 	}
 
-	// No rule matched — use default.
+	// No rule matched. In pre-phase, use the configured default (typically
+	// "deny" for fail-closed security). In post-phase, default to "allow"
+	// (pass through the response unchanged) — post-phase rules are opt-in
+	// content filters, not gatekeepers.
+	if phase == "post" {
+		return &PolicyDecision{Action: "allow", Reason: "no post-phase rules"}, nil
+	}
 	return &PolicyDecision{
 		Action: r.config.DefaultAction,
 		Reason: "default policy",
