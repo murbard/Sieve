@@ -93,7 +93,7 @@ Two-phase policy evaluation: pre-execution (should this operation happen?) and p
 ### Prerequisites
 
 - Go 1.23+ (for building from source) or Docker
-- A Google Cloud project with OAuth credentials (for Gmail/Drive/Calendar)
+- A Google Cloud project with OAuth credentials (for Gmail/Drive/Calendar) — see [Google OAuth setup guide](docs/google-oauth-setup.md) for a 5-minute walkthrough
 
 ### Run locally
 
