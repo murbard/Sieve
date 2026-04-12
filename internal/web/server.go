@@ -265,7 +265,7 @@ func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
 		if connType == "" {
 			conns = append(conns, c)
 		} else {
-			cat := c.ConnectorType // "google" or "http_proxy"
+			cat := c.ConnectorType // "google", "http_proxy", "mcp_proxy"
 			if cat == "http_proxy" {
 				// Check config for a more specific category.
 				if full, err := s.connections.GetWithConfig(c.ID); err == nil {
@@ -274,7 +274,12 @@ func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-			if cat == connType {
+			// "proxy" tab shows both http_proxy and mcp_proxy
+			if connType == "proxy" {
+				if cat == "http_proxy" || c.ConnectorType == "mcp_proxy" {
+					conns = append(conns, c)
+				}
+			} else if cat == connType {
 				conns = append(conns, c)
 			}
 		}
@@ -288,7 +293,12 @@ func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
 		filtered := make(map[string][]connector.ConnectorMeta)
 		for category, metas := range catalog {
 			for _, m := range metas {
-				if m.Type == connType {
+				match := m.Type == connType
+				// "proxy" tab shows both http_proxy and mcp_proxy connectors
+				if connType == "proxy" {
+					match = m.Type == "http_proxy" || m.Type == "mcp_proxy"
+				}
+				if match {
 					filtered[category] = append(filtered[category], m)
 				}
 			}
@@ -337,9 +347,9 @@ func (s *Server) handleConnectionAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For HTTP proxy connectors, read the proxy-specific fields from the form
-	// and save the connection directly (no OAuth flow needed).
-	if connectorType == "http_proxy" {
+	// For proxy connectors (HTTP or MCP), read the proxy-specific fields
+	// from the form and save the connection directly (no OAuth flow needed).
+	if connectorType == "http_proxy" || connectorType == "mcp_proxy" {
 		config := map[string]any{
 			"target_url":  r.FormValue("target_url"),
 			"auth_header": r.FormValue("auth_header"),

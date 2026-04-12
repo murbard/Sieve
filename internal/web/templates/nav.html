@@ -28,7 +28,7 @@
           <li><a href="/connections?type=google" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-google"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Google</a></li>
           <li><a href="/connections?type=cloud" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-cloud"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Cloud</a></li>
           <li><a href="/connections?type=llm" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-llm"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">LLM API</a></li>
-          <li><a href="/connections?type=http_proxy" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-http_proxy"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">HTTP Proxy</a></li>
+          <li><a href="/connections?type=proxy" class="block px-3 py-1 rounded-lg text-xs transition-colors {{if eq .Active "connections-proxy"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">Proxy (HTTP &amp; MCP)</a></li>
         </ul>
       </li>
 
@@ -104,6 +104,7 @@
           </li>
           <li><a href="/policies?scope=llm" class="block px-3 py-1.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-llm"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">LLM API</a></li>
           <li><a href="/policies?scope=http_proxy" class="block px-3 py-1.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-http_proxy"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">HTTP Proxy</a></li>
+          <li><a href="/policies?scope=mcp_proxy" class="block px-3 py-1.5 rounded-lg text-xs transition-colors {{if eq .Active "policies-mcp_proxy"}}text-indigo-400 bg-indigo-500/10{{else}}text-slate-400 hover:text-slate-200 hover:bg-slate-700/50{{end}}">MCP Proxy</a></li>
         </ul>
       </li>
 
