@@ -68,6 +68,13 @@
       </div>
       {{end}}
 
+      <!-- Multi-account tip for Google connections -->
+      {{if eq .ConnType "google"}}
+      <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-4 mb-6">
+        <p class="text-sm text-slate-300"><strong class="text-white">Multi-account access:</strong> Agents use the connection alias as the <code class="text-indigo-400">userId</code> in Gmail API paths. For example, <code class="text-indigo-400">/gmail/v1/users/work/messages</code> accesses the "work" connection, while <code class="text-indigo-400">/gmail/v1/users/me/messages</code> uses the default (first) connection.</p>
+      </div>
+      {{end}}
+
       <!-- Add Connection - Service Catalog -->
       <div class="mb-4">
         <h2 class="text-lg font-semibold text-white mb-1">Add Connection</h2>

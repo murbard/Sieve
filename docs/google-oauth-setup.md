@@ -127,6 +127,12 @@ connectors:
 You can connect multiple Google accounts. Each gets its own alias
 (e.g., "work", "personal") and policies are configured per-connection.
 
+**Multi-account access for agents:** Agents use the connection alias as the
+`userId` in Gmail API paths. For example:
+- `/gmail/v1/users/work/messages` — accesses the "work" connection
+- `/gmail/v1/users/personal/messages` — accesses the "personal" connection
+- `/gmail/v1/users/me/messages` — uses the default (first) Google connection
+
 ## Troubleshooting
 
 ### "redirect_uri_mismatch" error
