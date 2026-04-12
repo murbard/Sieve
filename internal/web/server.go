@@ -44,6 +44,7 @@ import (
 	"github.com/murbard/Sieve/internal/connections"
 	"github.com/murbard/Sieve/internal/connector"
 	"github.com/murbard/Sieve/internal/policies"
+	"github.com/murbard/Sieve/internal/roles"
 	"github.com/murbard/Sieve/internal/scriptgen"
 	"github.com/murbard/Sieve/internal/settings"
 	"github.com/murbard/Sieve/internal/tokens"
@@ -61,6 +62,7 @@ type Server struct {
 	tokens               *tokens.Service
 	connections          *connections.Service
 	policies             *policies.Service
+	roles                *roles.Service
 	registry             *connector.Registry
 	approval             *approval.Queue
 	audit                *audit.Logger
@@ -133,6 +135,7 @@ func NewServer(
 	tokensSvc *tokens.Service,
 	connsSvc *connections.Service,
 	policiesSvc *policies.Service,
+	rolesSvc *roles.Service,
 	registry *connector.Registry,
 	approvalQ *approval.Queue,
 	auditLog *audit.Logger,
@@ -144,6 +147,7 @@ func NewServer(
 		tokens:               tokensSvc,
 		connections:          connsSvc,
 		policies:             policiesSvc,
+		roles:                rolesSvc,
 		registry:             registry,
 		approval:             approvalQ,
 		audit:                auditLog,
@@ -155,7 +159,7 @@ func NewServer(
 	}
 
 	// Parse each page template together with the nav partial.
-	pages := []string{"connections", "tokens", "approvals", "audit", "policies", "policy_edit", "settings"}
+	pages := []string{"connections", "tokens", "approvals", "audit", "policies", "policy_edit", "settings", "roles"}
 	for _, page := range pages {
 		t := template.Must(
 			template.New("").Funcs(funcMap()).ParseFS(templateFS,
@@ -188,6 +192,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /tokens", s.handleTokens)
 	mux.HandleFunc("POST /tokens/create", s.handleTokenCreate)
 	mux.HandleFunc("POST /tokens/{id}/revoke", s.handleTokenRevoke)
+
+	// Roles
+	mux.HandleFunc("GET /roles", s.handleRoles)
+	mux.HandleFunc("POST /roles/create", s.handleRoleCreate)
+	mux.HandleFunc("POST /roles/{id}/delete", s.handleRoleDelete)
+	mux.HandleFunc("GET /roles/{id}/edit", s.handleRoleEdit)
+	mux.HandleFunc("POST /roles/{id}/update", s.handleRoleUpdate)
 
 	// Policies
 	mux.HandleFunc("GET /policies", s.handlePolicies)
@@ -562,11 +573,18 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rolesList, err := s.roles.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	data := map[string]any{
 		"Active":      "tokens",
 		"Tokens":      toks,
 		"Connections": conns,
 		"Policies":    pols,
+		"Roles":       rolesList,
 		"Filter":      filter,
 	}
 	s.render(w, "tokens", data)
@@ -579,11 +597,10 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := r.FormValue("name")
-	conns := r.Form["connections"]
-	policyIDs := r.Form["policy_ids"]
+	roleID := r.FormValue("role_id")
 
-	if len(policyIDs) == 0 {
-		http.Error(w, "at least one policy is required", http.StatusBadRequest)
+	if roleID == "" {
+		http.Error(w, "a role is required", http.StatusBadRequest)
 		return
 	}
 
@@ -598,10 +615,9 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := s.tokens.Create(&tokens.CreateRequest{
-		Name:        name,
-		Connections: conns,
-		PolicyIDs:   policyIDs,
-		ExpiresIn:   expiresIn,
+		Name:      name,
+		RoleID:    roleID,
+		ExpiresIn: expiresIn,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -627,11 +643,18 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rolesList, err := s.roles.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	data := map[string]any{
 		"Active":         "tokens",
 		"Tokens":         toks,
 		"Connections":    connList,
 		"Policies":       pols,
+		"Roles":          rolesList,
 		"PlaintextToken": result.PlaintextToken,
 		"CreatedToken":   result.Token,
 	}
@@ -645,6 +668,134 @@ func (s *Server) handleTokenRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/tokens", http.StatusSeeOther)
+}
+
+// --- Roles handlers ---
+
+func (s *Server) handleRoles(w http.ResponseWriter, r *http.Request) {
+	rolesList, err := s.roles.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	conns, err := s.connections.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	pols, err := s.policies.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := map[string]any{
+		"Active":      "roles",
+		"Roles":       rolesList,
+		"Connections": conns,
+		"Policies":    pols,
+	}
+	s.render(w, "roles", data)
+}
+
+func (s *Server) handleRoleCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	name := r.FormValue("name")
+	if name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse bindings from form. Each binding is a connection + policy IDs pair.
+	bindingsJSON := r.FormValue("bindings")
+	var bindings []roles.Binding
+	if bindingsJSON != "" {
+		if err := json.Unmarshal([]byte(bindingsJSON), &bindings); err != nil {
+			http.Error(w, "invalid bindings JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	if _, err := s.roles.Create(name, bindings); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/roles", http.StatusSeeOther)
+}
+
+func (s *Server) handleRoleDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.roles.Delete(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/roles", http.StatusSeeOther)
+}
+
+func (s *Server) handleRoleEdit(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	role, err := s.roles.Get(id)
+	if err != nil {
+		http.Error(w, "role not found", http.StatusNotFound)
+		return
+	}
+
+	conns, err := s.connections.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	pols, err := s.policies.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := map[string]any{
+		"Active":      "roles",
+		"Role":        role,
+		"Connections": conns,
+		"Policies":    pols,
+	}
+	s.render(w, "roles", data)
+}
+
+func (s *Server) handleRoleUpdate(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	name := r.FormValue("name")
+	if name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+
+	bindingsJSON := r.FormValue("bindings")
+	var bindings []roles.Binding
+	if bindingsJSON != "" {
+		if err := json.Unmarshal([]byte(bindingsJSON), &bindings); err != nil {
+			http.Error(w, "invalid bindings JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	if err := s.roles.Update(id, name, bindings); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/roles", http.StatusSeeOther)
 }
 
 // --- Policies handlers ---

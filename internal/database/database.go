@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -70,12 +71,18 @@ func (db *DB) migrate() error {
 		created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS roles (
+		id              TEXT PRIMARY KEY,
+		name            TEXT NOT NULL UNIQUE,
+		bindings        TEXT NOT NULL,
+		created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE IF NOT EXISTS tokens (
 		id               TEXT PRIMARY KEY,
 		name             TEXT NOT NULL UNIQUE,
 		token_hash       TEXT NOT NULL,
-		connections      TEXT NOT NULL,
-		policy_ids       TEXT NOT NULL,
+		role_id          TEXT NOT NULL,
 		created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
 		expires_at       DATETIME,
 		revoked          INTEGER DEFAULT 0
@@ -159,6 +166,86 @@ func (db *DB) migrate() error {
 		for _, stmt := range steps {
 			if _, err := db.Exec(stmt); err != nil {
 				return fmt.Errorf("migrate tokens table: %w", err)
+			}
+		}
+	}
+
+	// Migrate tokens from connections+policy_ids to role_id.
+	// Check if the old columns exist.
+	var hasConnectionsCol bool
+	rows2, err := db.Query("PRAGMA table_info(tokens)")
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var cid int
+			var colName, typ string
+			var notNull, pk int
+			var dflt *string
+			if err := rows2.Scan(&cid, &colName, &typ, &notNull, &dflt, &pk); err != nil {
+				continue
+			}
+			if colName == "connections" {
+				hasConnectionsCol = true
+			}
+		}
+	}
+
+	if hasConnectionsCol {
+		// For each existing token, create a role that bundles its connections
+		// and policies, then rebuild the tokens table with role_id.
+		tokenRows, err := db.Query(`SELECT id, name, connections, policy_ids FROM tokens`)
+		if err == nil {
+			defer tokenRows.Close()
+			for tokenRows.Next() {
+				var tokID, tokName, connsJSON, polsJSON string
+				if err := tokenRows.Scan(&tokID, &tokName, &connsJSON, &polsJSON); err != nil {
+					continue
+				}
+				var conns []string
+				var pols []string
+				json.Unmarshal([]byte(connsJSON), &conns)
+				json.Unmarshal([]byte(polsJSON), &pols)
+
+				// Build bindings: all connections get all policies (best we can do
+				// since old model didn't have per-connection policy mapping).
+				var bindings []map[string]any
+				for _, c := range conns {
+					bindings = append(bindings, map[string]any{
+						"connection_id": c,
+						"policy_ids":    pols,
+					})
+				}
+				bindingsJSON, _ := json.Marshal(bindings)
+
+				roleName := "auto-" + tokName
+				roleID := fmt.Sprintf("role_%s", tokID[:8])
+				db.Exec(`INSERT OR IGNORE INTO roles (id, name, bindings, created_at) VALUES (?, ?, ?, datetime('now'))`,
+					roleID, roleName, string(bindingsJSON))
+			}
+		}
+
+		// Rebuild tokens table with role_id instead of connections+policy_ids.
+		steps := []string{
+			`CREATE TABLE tokens_v3 (
+				id               TEXT PRIMARY KEY,
+				name             TEXT NOT NULL UNIQUE,
+				token_hash       TEXT NOT NULL,
+				role_id          TEXT NOT NULL,
+				created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+				expires_at       DATETIME,
+				revoked          INTEGER DEFAULT 0
+			)`,
+			`INSERT INTO tokens_v3 (id, name, token_hash, role_id, created_at, expires_at, revoked)
+				SELECT t.id, t.name, t.token_hash,
+					COALESCE((SELECT r.id FROM roles r WHERE r.name = 'auto-' || t.name LIMIT 1), ''),
+					t.created_at, t.expires_at, t.revoked
+				FROM tokens t`,
+			`DROP TABLE tokens`,
+			`ALTER TABLE tokens_v3 RENAME TO tokens`,
+		}
+		for _, stmt := range steps {
+			if _, err := db.Exec(stmt); err != nil {
+				return fmt.Errorf("migrate tokens to roles: %w", err)
 			}
 		}
 	}

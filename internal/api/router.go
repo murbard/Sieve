@@ -27,6 +27,7 @@ import (
 	"github.com/murbard/Sieve/internal/connections"
 	"github.com/murbard/Sieve/internal/policies"
 	"github.com/murbard/Sieve/internal/policy"
+	"github.com/murbard/Sieve/internal/roles"
 	"github.com/murbard/Sieve/internal/tokens"
 )
 
@@ -40,6 +41,7 @@ type Router struct {
 	tokens      *tokens.Service
 	connections *connections.Service
 	policies    *policies.Service
+	roles       *roles.Service
 	approval    *approval.Queue
 	audit       *audit.Logger
 }
@@ -49,6 +51,7 @@ func NewRouter(
 	tokensSvc *tokens.Service,
 	connsSvc *connections.Service,
 	policiesSvc *policies.Service,
+	rolesSvc *roles.Service,
 	approvalQ *approval.Queue,
 	auditLog *audit.Logger,
 ) *Router {
@@ -56,6 +59,7 @@ func NewRouter(
 		tokens:      tokensSvc,
 		connections: connsSvc,
 		policies:    policiesSvc,
+		roles:       rolesSvc,
 		approval:    approvalQ,
 		audit:       auditLog,
 	}
@@ -127,14 +131,21 @@ func (rt *Router) listConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	role, err := rt.roles.Get(tok.RoleID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role not found: "+err.Error())
+		return
+	}
+
 	type connInfo struct {
 		ID          string `json:"id"`
 		Connector   string `json:"connector"`
 		DisplayName string `json:"display_name"`
 	}
 
-	result := make([]connInfo, 0, len(tok.Connections))
-	for _, connID := range tok.Connections {
+	connIDs := role.ConnectionIDs()
+	result := make([]connInfo, 0, len(connIDs))
+	for _, connID := range connIDs {
 		conn, err := rt.connections.Get(connID)
 		if err != nil {
 			// Skip connections that can't be found (may have been removed).
@@ -163,8 +174,14 @@ func (rt *Router) executeOperation(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("conn")
 	operation := r.PathValue("operation")
 
-	// Verify the connection is in the token's allowed list.
-	if !connectionAllowed(tok, connID) {
+	role, err := rt.roles.Get(tok.RoleID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role not found: "+err.Error())
+		return
+	}
+
+	// Verify the connection is in the role's allowed list.
+	if !connectionAllowed(role, connID) {
 		writeError(w, http.StatusForbidden, fmt.Sprintf("connection %q not allowed for this token", connID))
 		return
 	}
@@ -210,9 +227,9 @@ func (rt *Router) executeOperation(w http.ResponseWriter, r *http.Request) {
 		Phase:      "pre",
 	}
 
-	evaluator, err := rt.getEvaluator(tok)
+	evaluator, err := rt.getEvaluator(role, connID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("policy error: %v", err))
+		writeError(w, http.StatusForbidden, fmt.Sprintf("policy error: %v", err))
 		return
 	}
 
@@ -296,9 +313,14 @@ func (rt *Router) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getEvaluator builds a composite evaluator from the token's policy list.
-func (rt *Router) getEvaluator(tok *tokens.Token) (policy.Evaluator, error) {
-	return rt.policies.BuildEvaluator(tok.PolicyIDs)
+// getEvaluator builds a composite evaluator from the policies assigned to a
+// specific connection within a role.
+func (rt *Router) getEvaluator(role *roles.Role, connID string) (policy.Evaluator, error) {
+	policyIDs := role.PoliciesForConnection(connID)
+	if len(policyIDs) == 0 {
+		return nil, fmt.Errorf("no policies for connection %q in role %q — access denied", connID, role.Name)
+	}
+	return rt.policies.BuildEvaluator(policyIDs)
 }
 
 // postPolicyCheck runs the post-execution policy evaluation. Returns the
@@ -358,7 +380,13 @@ func (rt *Router) handleProxy(w http.ResponseWriter, r *http.Request) {
 		proxyPath = "/" + parts[1]
 	}
 
-	if !connectionAllowed(tok, connID) {
+	role, err := rt.roles.Get(tok.RoleID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role not found: "+err.Error())
+		return
+	}
+
+	if !connectionAllowed(role, connID) {
 		writeError(w, http.StatusForbidden, fmt.Sprintf("connection %q not allowed", connID))
 		return
 	}
@@ -386,7 +414,7 @@ func (rt *Router) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// Policy evaluation — proxy requests go through the same pipeline as
 	// all other operations. The operation name encodes the HTTP method and
 	// path so policy rules can match on them (e.g., "deny proxy:POST:/v1/images").
-	evaluator, err := rt.getEvaluator(tok)
+	evaluator, err := rt.getEvaluator(role, connID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "policy error")
 		return
@@ -451,9 +479,9 @@ func (rt *Router) logAudit(tok *tokens.Token, connID, operation string, params m
 	})
 }
 
-// connectionAllowed checks if the given connection ID is in the token's allowed list.
-func connectionAllowed(tok *tokens.Token, connID string) bool {
-	for _, c := range tok.Connections {
+// connectionAllowed checks if the given connection ID is in the role's allowed list.
+func connectionAllowed(role *roles.Role, connID string) bool {
+	for _, c := range role.ConnectionIDs() {
 		if c == connID {
 			return true
 		}
@@ -518,10 +546,10 @@ func (rt *Router) approvalStatus(w http.ResponseWriter, r *http.Request) {
 
 // resolveGmailConnection resolves a Gmail userId to a connection ID.
 // "me" resolves to the first gmail connection. A specific alias is looked up directly.
-func (rt *Router) resolveGmailConnection(tok *tokens.Token, userId string) (string, error) {
+func (rt *Router) resolveGmailConnection(role *roles.Role, userId string) (string, error) {
 	if userId != "me" {
 		// Treat userId as a connection alias — verify it's allowed and is gmail
-		if !connectionAllowed(tok, userId) {
+		if !connectionAllowed(role, userId) {
 			return "", fmt.Errorf("connection %q not allowed for this token", userId)
 		}
 		conn, err := rt.connections.Get(userId)
@@ -535,7 +563,7 @@ func (rt *Router) resolveGmailConnection(tok *tokens.Token, userId string) (stri
 	}
 
 	// "me" — find the first gmail connection
-	for _, connID := range tok.Connections {
+	for _, connID := range role.ConnectionIDs() {
 		conn, err := rt.connections.Get(connID)
 		if err != nil {
 			continue
@@ -556,12 +584,18 @@ func (rt *Router) gmailExecute(w http.ResponseWriter, r *http.Request, operation
 		return
 	}
 
+	role, err := rt.roles.Get(tok.RoleID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role not found: "+err.Error())
+		return
+	}
+
 	userId := r.PathValue("userId")
 	if userId == "" {
 		userId = "me"
 	}
 
-	connID, err := rt.resolveGmailConnection(tok, userId)
+	connID, err := rt.resolveGmailConnection(role, userId)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
@@ -583,9 +617,9 @@ func (rt *Router) gmailExecute(w http.ResponseWriter, r *http.Request, operation
 		Metadata:   params,
 	}
 
-	evaluator, err := rt.getEvaluator(tok)
+	evaluator, err := rt.getEvaluator(role, connID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "policy error")
+		writeError(w, http.StatusForbidden, "policy error: "+err.Error())
 		return
 	}
 

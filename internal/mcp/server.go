@@ -37,6 +37,7 @@ import (
 	"github.com/murbard/Sieve/internal/connector"
 	"github.com/murbard/Sieve/internal/policies"
 	"github.com/murbard/Sieve/internal/policy"
+	"github.com/murbard/Sieve/internal/roles"
 	"github.com/murbard/Sieve/internal/tokens"
 )
 
@@ -97,6 +98,7 @@ type Server struct {
 	tokens      *tokens.Service
 	connections *connections.Service
 	policies    *policies.Service
+	roles       *roles.Service
 	approval *approval.Queue
 	audit    *audit.Logger
 }
@@ -106,6 +108,7 @@ func NewServer(
 	tokensSvc *tokens.Service,
 	connsSvc *connections.Service,
 	policiesSvc *policies.Service,
+	rolesSvc *roles.Service,
 	approvalQ *approval.Queue,
 	auditLog *audit.Logger,
 ) *Server {
@@ -113,6 +116,7 @@ func NewServer(
 		tokens:      tokensSvc,
 		connections: connsSvc,
 		policies:    policiesSvc,
+		roles:       rolesSvc,
 		approval: approvalQ,
 		audit:    auditLog,
 	}
@@ -194,12 +198,22 @@ func (s *Server) handleInitialize(id any) *JSONRPCResponse {
 
 // handleToolsList builds and returns tool definitions based on the token's connections.
 func (s *Server) handleToolsList(id any, tok *tokens.Token) *JSONRPCResponse {
+	role, err := s.roles.Get(tok.RoleID)
+	if err != nil {
+		return &JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Error:   &JSONRPCError{Code: -32000, Message: "role not found: " + err.Error()},
+		}
+	}
+
 	var tools []ToolDef
 
+	connIDs := role.ConnectionIDs()
 	// Determine if there are multiple connections (affects tool naming).
-	multiConn := len(tok.Connections) > 1
+	multiConn := len(connIDs) > 1
 
-	for _, connID := range tok.Connections {
+	for _, connID := range connIDs {
 		conn, err := s.connections.Get(connID)
 		if err != nil {
 			continue // skip connections we can't load
@@ -317,8 +331,18 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, tok *tokens.Token,
 		return s.handleProposePolicy(id, tok, start, call.Arguments)
 	}
 
+	// Resolve the role for this token.
+	role, err := s.roles.Get(tok.RoleID)
+	if err != nil {
+		return &JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Error:   &JSONRPCError{Code: -32000, Message: "role not found: " + err.Error()},
+		}
+	}
+
 	// Resolve connection and operation from the tool name.
-	connID, opName, err := s.resolveToolCall(tok, call)
+	connID, opName, err := s.resolveToolCall(role, call)
 	if err != nil {
 		return &JSONRPCResponse{
 			JSONRPC: "2.0",
@@ -327,10 +351,10 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, tok *tokens.Token,
 		}
 	}
 
-	// Security: verify the resolved connection is in the token's allow-list.
+	// Security: verify the resolved connection is in the role's allow-list.
 	// This prevents an agent from accessing connections it wasn't granted,
 	// even if it crafts a tool name or "connection" argument manually.
-	if !s.tokenHasConnection(tok, connID) {
+	if !s.tokenHasConnection(role, connID) {
 		return &JSONRPCResponse{
 			JSONRPC: "2.0",
 			ID:      id,
@@ -357,8 +381,8 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, tok *tokens.Token,
 		Phase:      "pre",
 	}
 
-	// Get or create the policy evaluator for this token.
-	evaluator, err := s.getEvaluator(tok)
+	// Get or create the policy evaluator for this connection's policies.
+	evaluator, err := s.getEvaluator(role, connID)
 	if err != nil {
 		return &JSONRPCResponse{
 			JSONRPC: "2.0",
@@ -524,8 +548,17 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, tok *tokens.Token,
 
 // handleListConnections returns the token's available connections.
 func (s *Server) handleListConnections(id any, tok *tokens.Token, start time.Time) *JSONRPCResponse {
+	role, err := s.roles.Get(tok.RoleID)
+	if err != nil {
+		return &JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Error:   &JSONRPCError{Code: -32000, Message: "role not found: " + err.Error()},
+		}
+	}
+
 	var conns []map[string]string
-	for _, connID := range tok.Connections {
+	for _, connID := range role.ConnectionIDs() {
 		conn, err := s.connections.Get(connID)
 		if err != nil {
 			continue
@@ -580,17 +613,29 @@ func (s *Server) handleListPolicies(id any, tok *tokens.Token, start time.Time) 
 }
 
 func (s *Server) handleGetMyPolicy(id any, tok *tokens.Token, start time.Time) *JSONRPCResponse {
+	role, err := s.roles.Get(tok.RoleID)
+	if err != nil {
+		return &JSONRPCResponse{JSONRPC: "2.0", ID: id, Error: &JSONRPCError{Code: -32000, Message: "role not found: " + err.Error()}}
+	}
+
 	var results []map[string]any
-	for _, pid := range tok.PolicyIDs {
-		p, err := s.policies.Get(pid)
-		if err != nil {
-			return &JSONRPCResponse{JSONRPC: "2.0", ID: id, Error: &JSONRPCError{Code: -32000, Message: err.Error()}}
+	for _, binding := range role.Bindings {
+		var bindingPolicies []map[string]any
+		for _, pid := range binding.PolicyIDs {
+			p, err := s.policies.Get(pid)
+			if err != nil {
+				return &JSONRPCResponse{JSONRPC: "2.0", ID: id, Error: &JSONRPCError{Code: -32000, Message: err.Error()}}
+			}
+			bindingPolicies = append(bindingPolicies, map[string]any{
+				"id":     p.ID,
+				"name":   p.Name,
+				"type":   p.PolicyType,
+				"config": p.PolicyConfig,
+			})
 		}
 		results = append(results, map[string]any{
-			"id":     p.ID,
-			"name":   p.Name,
-			"type":   p.PolicyType,
-			"config": p.PolicyConfig,
+			"connection_id": binding.ConnectionID,
+			"policies":      bindingPolicies,
 		})
 	}
 
@@ -646,7 +691,7 @@ func (s *Server) handleProposePolicy(id any, tok *tokens.Token, start time.Time,
 // When there are multiple connections, the tool name may be prefixed with the
 // connector type, and a "connection" argument may be provided. For single
 // connections the tool name maps directly to the operation.
-func (s *Server) resolveToolCall(tok *tokens.Token, call ToolCallParams) (connID string, opName string, err error) {
+func (s *Server) resolveToolCall(role *roles.Role, call ToolCallParams) (connID string, opName string, err error) {
 	// If a "connection" argument is explicitly provided, use it.
 	if connArg, ok := call.Arguments["connection"]; ok {
 		connIDStr, ok := connArg.(string)
@@ -672,12 +717,13 @@ func (s *Server) resolveToolCall(tok *tokens.Token, call ToolCallParams) (connID
 
 	// Single connection: use the only available connection.
 	// Reverse the dot-to-underscore normalization applied when building tool names.
-	if len(tok.Connections) == 1 {
-		return tok.Connections[0], denormalizeDots(call.Name), nil
+	connIDs := role.ConnectionIDs()
+	if len(connIDs) == 1 {
+		return connIDs[0], denormalizeDots(call.Name), nil
 	}
 
 	// Multiple connections: tool name should be prefixed. Find the matching connector.
-	for _, cID := range tok.Connections {
+	for _, cID := range connIDs {
 		conn, err := s.connections.Get(cID)
 		if err != nil {
 			continue
@@ -691,9 +737,9 @@ func (s *Server) resolveToolCall(tok *tokens.Token, call ToolCallParams) (connID
 	return "", "", fmt.Errorf("cannot resolve connection for tool %q; provide a 'connection' argument", call.Name)
 }
 
-// tokenHasConnection checks whether the given connection ID is in the token's allowed list.
-func (s *Server) tokenHasConnection(tok *tokens.Token, connID string) bool {
-	for _, c := range tok.Connections {
+// tokenHasConnection checks whether the given connection ID is in the role's allowed list.
+func (s *Server) tokenHasConnection(role *roles.Role, connID string) bool {
+	for _, c := range role.ConnectionIDs() {
 		if c == connID {
 			return true
 		}
@@ -701,12 +747,16 @@ func (s *Server) tokenHasConnection(tok *tokens.Token, connID string) bool {
 	return false
 }
 
-// getEvaluator creates a composite evaluator from all policies attached to the
-// token. Multiple policies are chained: all must allow, first deny wins,
-// redactions and rewrites are merged. This enables composable policy blocks
-// like "drafter" + "redact-pii" + "rate-limit-reads".
-func (s *Server) getEvaluator(tok *tokens.Token) (policy.Evaluator, error) {
-	return s.policies.BuildEvaluator(tok.PolicyIDs)
+// getEvaluator creates a composite evaluator from the policies assigned to a
+// specific connection within a role. Different connections in the same role can
+// have different policies. Returns a deny-all evaluator if the connection has
+// no policies in the role.
+func (s *Server) getEvaluator(role *roles.Role, connID string) (policy.Evaluator, error) {
+	policyIDs := role.PoliciesForConnection(connID)
+	if len(policyIDs) == 0 {
+		return nil, fmt.Errorf("no policies for connection %q in role %q — access denied", connID, role.Name)
+	}
+	return s.policies.BuildEvaluator(policyIDs)
 }
 
 // denormalizeDots reverses the dot-to-underscore normalization applied to tool

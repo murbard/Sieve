@@ -1,8 +1,8 @@
 // Package tokens manages API tokens that authenticate AI agents to Sieve.
 //
-// Each token is a capability handle: it grants access to specific connections
-// and is bound to one or more policies (composed at evaluation time). The token
-// itself is a random 32-byte secret with a "sieve_tok_" prefix.
+// Each token is a capability handle bound to a role. The role determines
+// which connections and policies apply. The token itself is a random
+// 32-byte secret with a "sieve_tok_" prefix.
 //
 // Security design:
 //   - Only the SHA-256 hash is stored. Plaintext returned once at creation.
@@ -14,7 +14,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -24,27 +23,25 @@ import (
 
 // Token represents a stored API token.
 type Token struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Connections []string   `json:"connections"`
-	PolicyIDs   []string   `json:"policy_ids"`
-	CreatedAt   time.Time  `json:"created_at"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-	Revoked     bool       `json:"revoked"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	RoleID    string     `json:"role_id"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	Revoked   bool       `json:"revoked"`
 }
 
 // CreateRequest is used when creating a new token.
 type CreateRequest struct {
-	Name        string
-	Connections []string
-	PolicyIDs   []string
-	ExpiresIn   time.Duration // 0 means no expiry
+	Name      string
+	RoleID    string
+	ExpiresIn time.Duration // 0 means no expiry
 }
 
 // CreateResult is returned after creating a token.
 type CreateResult struct {
 	Token          *Token
-	PlaintextToken string // "sieve_tok_..." - only returned at creation time
+	PlaintextToken string
 }
 
 type Service struct {
@@ -55,7 +52,6 @@ func NewService(db *database.DB) *Service {
 	return &Service{db: db}
 }
 
-// Create generates a new API token.
 func (s *Service) Create(req *CreateRequest) (*CreateResult, error) {
 	idBytes := make([]byte, 8)
 	if _, err := rand.Read(idBytes); err != nil {
@@ -72,16 +68,6 @@ func (s *Service) Create(req *CreateRequest) (*CreateResult, error) {
 	hash := sha256.Sum256([]byte(plaintext))
 	tokenHash := hex.EncodeToString(hash[:])
 
-	connectionsJSON, err := json.Marshal(req.Connections)
-	if err != nil {
-		return nil, fmt.Errorf("marshal connections: %w", err)
-	}
-
-	policyIDsJSON, err := json.Marshal(req.PolicyIDs)
-	if err != nil {
-		return nil, fmt.Errorf("marshal policy_ids: %w", err)
-	}
-
 	now := time.Now().UTC()
 	var expiresAt *time.Time
 	if req.ExpiresIn > 0 {
@@ -89,25 +75,22 @@ func (s *Service) Create(req *CreateRequest) (*CreateResult, error) {
 		expiresAt = &t
 	}
 
-	_, err = s.db.Exec(
-		`INSERT INTO tokens (id, name, token_hash, connections, policy_ids, created_at, expires_at, revoked)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
-		id, req.Name, tokenHash, string(connectionsJSON), string(policyIDsJSON), now, expiresAt,
+	_, err := s.db.Exec(
+		`INSERT INTO tokens (id, name, token_hash, role_id, created_at, expires_at, revoked)
+		 VALUES (?, ?, ?, ?, ?, ?, 0)`,
+		id, req.Name, tokenHash, req.RoleID, now, expiresAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert token: %w", err)
 	}
 
-	token := &Token{
-		ID:          id,
-		Name:        req.Name,
-		Connections: req.Connections,
-		PolicyIDs:   req.PolicyIDs,
-		CreatedAt:   now,
-		ExpiresAt:   expiresAt,
-	}
-
-	return &CreateResult{Token: token, PlaintextToken: plaintext}, nil
+	return &CreateResult{
+		Token: &Token{
+			ID: id, Name: req.Name, RoleID: req.RoleID,
+			CreatedAt: now, ExpiresAt: expiresAt,
+		},
+		PlaintextToken: plaintext,
+	}, nil
 }
 
 func (s *Service) Validate(plaintextToken string) (*Token, error) {
@@ -115,7 +98,7 @@ func (s *Service) Validate(plaintextToken string) (*Token, error) {
 	tokenHash := hex.EncodeToString(hash[:])
 
 	row := s.db.QueryRow(
-		`SELECT id, name, connections, policy_ids, created_at, expires_at, revoked
+		`SELECT id, name, role_id, created_at, expires_at, revoked
 		 FROM tokens WHERE token_hash = ?`, tokenHash,
 	)
 
@@ -139,8 +122,7 @@ func (s *Service) Validate(plaintextToken string) (*Token, error) {
 
 func (s *Service) Get(id string) (*Token, error) {
 	row := s.db.QueryRow(
-		`SELECT id, name, connections, policy_ids, created_at, expires_at, revoked
-		 FROM tokens WHERE id = ?`, id,
+		`SELECT id, name, role_id, created_at, expires_at, revoked FROM tokens WHERE id = ?`, id,
 	)
 	token, err := scanToken(row)
 	if err != nil {
@@ -154,7 +136,7 @@ func (s *Service) Get(id string) (*Token, error) {
 
 func (s *Service) List() ([]Token, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, connections, policy_ids, created_at, expires_at, revoked FROM tokens`,
+		`SELECT id, name, role_id, created_at, expires_at, revoked FROM tokens`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query tokens: %w", err)
@@ -196,38 +178,22 @@ func (s *Service) Delete(id string) error {
 	return nil
 }
 
-type scanner interface {
-	Scan(dest ...any) error
-}
+type scanner interface{ Scan(dest ...any) error }
 
 func scanFromScanner(s scanner) (*Token, error) {
 	var (
-		token           Token
-		connectionsJSON string
-		policyIDsJSON   string
-		expiresAt       sql.NullTime
-		revoked         int
+		token     Token
+		expiresAt sql.NullTime
+		revoked   int
 	)
-
-	err := s.Scan(
-		&token.ID, &token.Name, &connectionsJSON, &policyIDsJSON,
-		&token.CreatedAt, &expiresAt, &revoked,
-	)
+	err := s.Scan(&token.ID, &token.Name, &token.RoleID, &token.CreatedAt, &expiresAt, &revoked)
 	if err != nil {
 		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(connectionsJSON), &token.Connections); err != nil {
-		return nil, fmt.Errorf("unmarshal connections: %w", err)
-	}
-	if err := json.Unmarshal([]byte(policyIDsJSON), &token.PolicyIDs); err != nil {
-		return nil, fmt.Errorf("unmarshal policy_ids: %w", err)
 	}
 	if expiresAt.Valid {
 		token.ExpiresAt = &expiresAt.Time
 	}
 	token.Revoked = revoked != 0
-
 	return &token, nil
 }
 
