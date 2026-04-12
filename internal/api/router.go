@@ -79,6 +79,7 @@ func (rt *Router) Handler() http.Handler {
 
 	// Gmail-compatible API — same policy pipeline, Gmail REST format
 	// {userId} is "me" for single-connection tokens, or the connection alias for multi-connection
+	mux.HandleFunc("GET /gmail/v1/users", rt.gmailListUsers)
 	mux.HandleFunc("GET /gmail/v1/users/{userId}/messages", rt.gmailListMessages)
 	mux.HandleFunc("GET /gmail/v1/users/{userId}/messages/{id}", rt.gmailGetMessage)
 	mux.HandleFunc("GET /gmail/v1/users/{userId}/threads/{id}", rt.gmailGetThread)
@@ -695,6 +696,55 @@ func (rt *Router) gmailExecute(w http.ResponseWriter, r *http.Request, operation
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resultJSON)
+}
+
+// gmailListUsers returns the Google connections available to this token.
+// This is a Sieve extension (not part of the real Gmail API) that lets
+// agents discover which accounts they can access.
+func (rt *Router) gmailListUsers(w http.ResponseWriter, r *http.Request) {
+	tok := tokenFromContext(r)
+	if tok == nil {
+		writeError(w, http.StatusUnauthorized, "no token")
+		return
+	}
+
+	role, err := rt.roles.Get(tok.RoleID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role not found")
+		return
+	}
+
+	type userInfo struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+		Email       string `json:"emailAddress,omitempty"`
+	}
+
+	var users []userInfo
+	for _, connID := range role.ConnectionIDs() {
+		conn, err := rt.connections.Get(connID)
+		if err != nil {
+			continue
+		}
+		if conn.ConnectorType != "google" {
+			continue
+		}
+		u := userInfo{
+			ID:          conn.ID,
+			DisplayName: conn.DisplayName,
+		}
+		// Try to get the email from the config.
+		if full, err := rt.connections.GetWithConfig(connID); err == nil {
+			if email, ok := full.Config["email"].(string); ok {
+				u.Email = email
+			}
+		}
+		users = append(users, u)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users": users,
+	})
 }
 
 func (rt *Router) gmailListMessages(w http.ResponseWriter, r *http.Request) {

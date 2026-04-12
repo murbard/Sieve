@@ -129,8 +129,9 @@ curl -X POST "http://localhost:19817/gmail/v1/users/me/messages/MESSAGE_ID/modif
 
 ## Available endpoints
 
-| Method | Endpoint | Gmail operation |
-|--------|----------|-----------------|
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/gmail/v1/users` | List available Google accounts (Sieve extension) |
 | GET | `/gmail/v1/users/{userId}/messages` | list_emails |
 | GET | `/gmail/v1/users/{userId}/messages/{id}` | read_email |
 | GET | `/gmail/v1/users/{userId}/threads/{id}` | read_thread |
@@ -140,6 +141,27 @@ curl -X POST "http://localhost:19817/gmail/v1/users/me/messages/MESSAGE_ID/modif
 | POST | `/gmail/v1/users/{userId}/messages/{id}/modify` | add_label / remove_label / archive |
 
 `{userId}` is `me` (default Gmail connection) or a connection alias (e.g., `work`, `personal`).
+
+### Discovering accounts
+
+Call `GET /gmail/v1/users` to list the Google accounts your token can access:
+
+```bash
+curl http://localhost:19817/gmail/v1/users \
+  -H "Authorization: Bearer sieve_tok_xxxxx"
+```
+
+Response:
+```json
+{
+  "users": [
+    {"id": "work", "displayName": "Work Gmail", "emailAddress": "you@work.com"},
+    {"id": "personal", "displayName": "Personal", "emailAddress": "you@gmail.com"}
+  ]
+}
+```
+
+Use the `id` as the `{userId}` in subsequent requests.
 
 ## Query parameters
 
@@ -183,8 +205,9 @@ Your script/agent          Sieve                         Gmail API
 
 ## Multiple Gmail accounts
 
-A single Sieve token can access multiple Gmail accounts. The `userId`
-path parameter controls which inbox you're talking to:
+A single Sieve token can access multiple Gmail accounts. Call
+`GET /gmail/v1/users` first to discover which accounts are available,
+then use the `userId` path parameter to address a specific inbox:
 
 ### Single-account tokens
 
