@@ -18,19 +18,17 @@ import (
 
 // PolicyRequest describes the action an AI agent wants to perform.
 //
-// Security note on Phase: Phase is set explicitly by the calling code (MCP
-// server or API router), NOT derived from request metadata. This prevents an
-// agent from injecting phase="post" in its request parameters to bypass
-// pre-execution policy checks. The caller sets Phase="pre" before execution
-// and Phase="post" after, ensuring the policy engine always sees the correct
-// phase regardless of what the agent sends.
+// The Phase field is retained for backward compatibility with scripts that
+// check metadata.phase, but the rules evaluator no longer uses it. All rule
+// evaluation happens in a single pre-execution pass; post-execution content
+// filtering is handled via ResponseFilter objects on the PolicyDecision.
 type PolicyRequest struct {
 	Operation  string         `json:"operation"`
 	Connection string         `json:"connection"`
 	Connector  string         `json:"connector"`
 	Params     map[string]any `json:"params"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
-	Phase      string         `json:"phase,omitempty"` // "pre" or "post", set by caller — not from metadata
+	Phase      string         `json:"phase,omitempty"` // kept for script compat; rules evaluator ignores it
 }
 
 // ResponseFilter describes a post-execution content modification.
@@ -51,9 +49,9 @@ type Redaction struct {
 }
 
 // PolicyDecision is the result of evaluating a policy. The Action field drives
-// the control flow in the MCP server and API router. Rewrite is used by
-// post-phase filter rules to return a modified version of the connector's
-// response (e.g., with filtered-out list items removed).
+// the control flow in the MCP server and API router. Filters contains
+// ResponseFilter objects to be applied to the response after execution.
+// Rewrite is used by script evaluators to return a modified response.
 type PolicyDecision struct {
 	Action     string           `json:"action"` // "allow", "deny", "approval_required"
 	Reason     string           `json:"reason,omitempty"`

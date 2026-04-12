@@ -31,7 +31,7 @@ type Rule struct {
 	Match *RuleMatch `json:"match,omitempty"`
 
 	// Action to take when matched.
-	Action string `json:"action"` // "allow", "deny", "approval_required", "skip", "script", "filter"
+	Action string `json:"action"` // "allow", "deny", "approval_required", "script"
 
 	// Reason shown to the agent when this rule fires.
 	Reason string `json:"reason,omitempty"`
@@ -57,11 +57,11 @@ type RuleMatch struct {
 	// Operations to match (exact names). Empty = match all.
 	Operations []string `json:"operations,omitempty"`
 
-	// Phase: "pre" (before execution) or "post" (after execution).
-	// Empty = "pre".
-	Phase string `json:"phase,omitempty"`
+	// The rules evaluator no longer checks this field; all rules evaluate
+	// in pre-execution mode. Post-execution filtering uses ResponseFilter.
+	// Phase field removed — single-phase model. Field kept in JSON for backward compat only.
 
-	// ContentContains — for post-phase: match if the response contains
+	// ContentContains — match if the response in metadata contains
 	// this string (case-insensitive).
 	ContentContains string `json:"content_contains,omitempty"`
 
@@ -153,7 +153,7 @@ func (r *RulesEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*Pol
 
 		// This rule matched — its action is authoritative.
 		switch rule.Action {
-		case "allow", "filter":
+		case "allow":
 			decision := &PolicyDecision{
 				Action: "allow",
 				Reason: rule.Reason,
@@ -258,7 +258,7 @@ func (r *RulesEvaluator) matches(rule *Rule, req *PolicyRequest) bool {
 		}
 	}
 
-	// Content contains (post-phase).
+	// Content contains check (typically used with response data in metadata).
 	if m.ContentContains != "" {
 		response, _ := req.Metadata["response"].(string)
 		if !strings.Contains(strings.ToLower(response), strings.ToLower(m.ContentContains)) {
@@ -266,9 +266,9 @@ func (r *RulesEvaluator) matches(rule *Rule, req *PolicyRequest) bool {
 		}
 	}
 
-	// From address check. The "from" field may appear in metadata (post-phase,
-	// extracted from the response) or in params (pre-phase, provided by the
-	// agent). We check both locations to support matching in either phase.
+	// From address check. The "from" field may appear in metadata (extracted
+	// from the response) or in params (provided by the agent). We check both
+	// locations to support matching regardless of where the data originates.
 	if len(m.From) > 0 {
 		from, _ := req.Metadata["from"].(string)
 		if from == "" {
@@ -345,7 +345,7 @@ func (r *RulesEvaluator) matches(rule *Rule, req *PolicyRequest) bool {
 			labelsVerified = true
 		}
 
-		// Path 2: raw response string fallback (post-phase)
+		// Path 2: raw response string fallback
 		if !labelsVerified {
 			if response, ok := req.Metadata["response"].(string); ok {
 				responseLower := strings.ToLower(response)

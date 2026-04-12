@@ -180,7 +180,7 @@
                     <!-- Content modification fields (shown for allow/deny/approval, hidden for script) -->
                     <div id="extras-section" class="pt-2 border-t border-slate-700 space-y-3">
                       <div>
-                        <label class="block text-sm text-slate-400 mb-1">Exclude content <span class="text-slate-600">(remove items containing this text, post-phase)</span></label>
+                        <label class="block text-sm text-slate-400 mb-1">Exclude content <span class="text-slate-600">(remove matching items from response)</span></label>
                         <input type="text" id="rule-filter-exclude" placeholder="confidential"
                                class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                       </div>
@@ -614,7 +614,7 @@
         if (r.from) match.from = [r.from];
         if (r.subject) match.subject_contains = [r.subject];
         if (r.label) match.labels = [r.label];
-        if (r.content) { match.content_contains = r.content; match.phase = "post"; }
+        if (r.content) { match.content_contains = r.content; }
 
         if (Object.keys(match).length > 0) rule.match = match;
         return rule;

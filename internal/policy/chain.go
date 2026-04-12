@@ -61,6 +61,7 @@ func (c *ChainEvaluator) Type() string {
 func (c *ChainEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*PolicyDecision, error) {
 	var (
 		allRedactions    []Redaction
+		allFilters       []ResponseFilter
 		approvalRequired bool
 		reasons          []string
 		rewrite          string
@@ -72,12 +73,12 @@ func (c *ChainEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*Pol
 			return nil, fmt.Errorf("chain evaluator (%s): %w", eval.Type(), err)
 		}
 
-		// Collect redactions from every evaluator.
 		if len(decision.Redactions) > 0 {
 			allRedactions = append(allRedactions, decision.Redactions...)
 		}
-
-		// Last rewrite wins.
+		if len(decision.Filters) > 0 {
+			allFilters = append(allFilters, decision.Filters...)
+		}
 		if decision.Rewrite != "" {
 			rewrite = decision.Rewrite
 		}
@@ -107,6 +108,7 @@ func (c *ChainEvaluator) Evaluate(ctx context.Context, req *PolicyRequest) (*Pol
 		Action:     action,
 		Reason:     strings.Join(reasons, "; "),
 		Redactions: allRedactions,
+		Filters:    allFilters,
 		Rewrite:    rewrite,
 	}, nil
 }
