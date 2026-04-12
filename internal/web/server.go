@@ -516,10 +516,38 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 // --- Tokens handlers ---
 
 func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
-	toks, err := s.tokens.List()
+	allToks, err := s.tokens.List()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Filter tokens by status.
+	filter := r.URL.Query().Get("filter")
+	now := time.Now().UTC()
+	var toks []tokens.Token
+	for _, t := range allToks {
+		switch filter {
+		case "active":
+			if t.Revoked {
+				continue
+			}
+			if t.ExpiresAt != nil && now.After(*t.ExpiresAt) {
+				continue
+			}
+		case "revoked":
+			if !t.Revoked {
+				continue
+			}
+		case "expired":
+			if t.ExpiresAt == nil || !now.After(*t.ExpiresAt) {
+				continue
+			}
+			if t.Revoked {
+				continue // show revoked under "revoked", not "expired"
+			}
+		}
+		toks = append(toks, t)
 	}
 
 	conns, err := s.connections.List()
@@ -539,6 +567,7 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 		"Tokens":      toks,
 		"Connections": conns,
 		"Policies":    pols,
+		"Filter":      filter,
 	}
 	s.render(w, "tokens", data)
 }

@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tokens - Sieve</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>body { font-family: 'Inter', sans-serif; }</style>
@@ -32,9 +31,6 @@
               <code id="token-value" class="flex-1 bg-slate-900 text-amber-300 px-4 py-2.5 rounded-lg text-sm font-mono break-all select-all border border-slate-700">{{.PlaintextToken}}</code>
               <button onclick="navigator.clipboard.writeText(document.getElementById('token-value').textContent)"
                       class="flex-shrink-0 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-500 transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
-                </svg>
                 Copy
               </button>
             </div>
@@ -51,7 +47,7 @@
             <div>
               <label for="name" class="block text-sm font-medium text-slate-400 mb-1.5">Name</label>
               <input type="text" id="name" name="name" required placeholder="e.g. my-agent"
-                     class="w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                     class="w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div>
               <label class="block text-sm font-medium text-slate-400 mb-1.5">Connections</label>
@@ -68,7 +64,7 @@
               </div>
             </div>
             <div>
-              <label class="block text-sm font-medium text-slate-400 mb-1.5">Policies (select one or more)</label>
+              <label class="block text-sm font-medium text-slate-400 mb-1.5">Policies</label>
               <div class="bg-slate-900 border border-slate-600 rounded-lg p-3 max-h-32 overflow-y-auto space-y-2">
                 {{range .Policies}}
                 <label class="flex items-center gap-2 cursor-pointer">
@@ -84,7 +80,7 @@
             <div>
               <label for="expires_in" class="block text-sm font-medium text-slate-400 mb-1.5">Expires In</label>
               <select id="expires_in" name="expires_in"
-                      class="w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                      class="w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <option value="">Never</option>
                 <option value="24h">24 hours</option>
                 <option value="168h">7 days</option>
@@ -92,15 +88,23 @@
               </select>
             </div>
           </div>
-
           <button type="submit"
-                  class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800">
+                  class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
             Create Token
           </button>
         </form>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="flex items-center gap-2 mb-4">
+        <span class="text-sm text-slate-400">Show:</span>
+        <a href="/tokens" class="px-3 py-1 rounded-lg text-xs font-medium transition-colors {{if eq .Filter ""}}bg-indigo-500/20 text-indigo-400{{else}}bg-slate-700 text-slate-300 hover:bg-slate-600{{end}}">All</a>
+        <a href="/tokens?filter=active" class="px-3 py-1 rounded-lg text-xs font-medium transition-colors {{if eq .Filter "active"}}bg-emerald-500/20 text-emerald-400{{else}}bg-slate-700 text-slate-300 hover:bg-slate-600{{end}}">Active</a>
+        <a href="/tokens?filter=revoked" class="px-3 py-1 rounded-lg text-xs font-medium transition-colors {{if eq .Filter "revoked"}}bg-red-500/20 text-red-400{{else}}bg-slate-700 text-slate-300 hover:bg-slate-600{{end}}">Revoked</a>
+        <a href="/tokens?filter=expired" class="px-3 py-1 rounded-lg text-xs font-medium transition-colors {{if eq .Filter "expired"}}bg-amber-500/20 text-amber-400{{else}}bg-slate-700 text-slate-300 hover:bg-slate-600{{end}}">Expired</a>
       </div>
 
       <!-- Tokens Table -->
@@ -110,7 +114,7 @@
             <tr class="border-b border-slate-700">
               <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Name</th>
               <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Connections</th>
-              <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Policy</th>
+              <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Policies</th>
               <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Created</th>
               <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Expires</th>
               <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Status</th>
@@ -119,12 +123,10 @@
           </thead>
           <tbody class="divide-y divide-slate-700">
             {{range .Tokens}}
-            <tr class="hover:bg-slate-750 transition-colors">
+            <tr class="hover:bg-slate-700/30 transition-colors">
               <td class="px-6 py-4 text-sm font-medium text-white">{{.Name}}</td>
-              <td class="px-6 py-4 text-sm text-slate-300">
-                {{joinStrings .Connections ", "}}
-              </td>
-              <td class="px-6 py-4 text-sm text-slate-300 font-mono text-xs">{{joinStrings .PolicyIDs ", "}}</td>
+              <td class="px-6 py-4 text-sm text-slate-300">{{joinStrings .Connections ", "}}</td>
+              <td class="px-6 py-4 text-sm text-slate-400 font-mono text-xs">{{joinStrings .PolicyIDs ", "}}</td>
               <td class="px-6 py-4 text-sm text-slate-400">{{timeAgo .CreatedAt}}</td>
               <td class="px-6 py-4 text-sm text-slate-400">
                 {{if .ExpiresAt}}{{timeAgo (derefTime .ExpiresAt)}}{{else}}<span class="text-slate-600">Never</span>{{end}}
@@ -139,8 +141,7 @@
               <td class="px-6 py-4 text-right">
                 {{if not .Revoked}}
                 <form method="POST" action="/tokens/{{.ID}}/revoke"
-                      hx-post="/tokens/{{.ID}}/revoke"
-                      hx-confirm="Revoke token '{{.Name}}'? API clients using it will stop working."
+                      onsubmit="return confirm('Revoke token \'{{.Name}}\'? API clients using it will stop working.')"
                       class="inline">
                   <button type="submit"
                           class="text-sm text-red-400 hover:text-red-300 font-medium transition-colors">
@@ -155,7 +156,7 @@
             {{else}}
             <tr>
               <td colspan="7" class="px-6 py-12 text-center text-slate-500">
-                No tokens yet. Create one above.
+                No tokens match the current filter.
               </td>
             </tr>
             {{end}}
