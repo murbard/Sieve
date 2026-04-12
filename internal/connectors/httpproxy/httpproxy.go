@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/plandex-ai/sieve/internal/connector"
+	"github.com/murbard/Sieve/internal/connector"
 )
 
 var Meta = connector.ConnectorMeta{

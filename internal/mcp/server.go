@@ -31,13 +31,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/plandex-ai/sieve/internal/approval"
-	"github.com/plandex-ai/sieve/internal/audit"
-	"github.com/plandex-ai/sieve/internal/connections"
-	"github.com/plandex-ai/sieve/internal/connector"
-	"github.com/plandex-ai/sieve/internal/policies"
-	"github.com/plandex-ai/sieve/internal/policy"
-	"github.com/plandex-ai/sieve/internal/tokens"
+	"github.com/murbard/Sieve/internal/approval"
+	"github.com/murbard/Sieve/internal/audit"
+	"github.com/murbard/Sieve/internal/connections"
+	"github.com/murbard/Sieve/internal/connector"
+	"github.com/murbard/Sieve/internal/policies"
+	"github.com/murbard/Sieve/internal/policy"
+	"github.com/murbard/Sieve/internal/tokens"
 )
 
 // JSON-RPC 2.0 types

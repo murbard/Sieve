@@ -11,9 +11,9 @@ You run AI agents — Claude Code, Codex, custom scripts — across projects. Th
 **You can't just hand them your API keys.**
 
 - **Gmail OAuth tokens give full account access.** There's no Gmail scope for "read only emails about Project X" or "draft but never send."
-- **LLM API keys are all-or-nothing.** You can't restrict an agent to a specific model, cap spending, or prevent it from seeing certain prompts.
-- **AWS credentials are dangerously powerful.** An agent with your access key can launch 100 GPU instances or delete S3 buckets.
-- **Credentials given to agents are hard to control.** They end up on provider servers, in logs, in prompt history. You have to rotate them across every project to revoke.
+- **LLM API keys are all-or-nothing.** You can't restrict an agent to a specific model, cap spending, or filter what it sends in prompts.
+- **AWS IAM policies can do fine-grained permissions, but they're painful.** You either spend hours writing JSON IAM policies across multiple AWS consoles, or you hand over broad access and hope for the best. Sieve lets you write quick, local rules without touching AWS IAM at all.
+- **Credentials given to agents are hard to control.** They end up on provider servers, in logs, in prompt history. Revoking means logging into each service's website — Google Cloud Console, AWS IAM, Anthropic dashboard, OpenAI platform — rotating the key, and updating every project that uses it. With 5 services and 10 projects, that's 50 touch points.
 
 ## Why Sieve
 
@@ -26,7 +26,7 @@ Gmail's permission model has three scopes: readonly, send, modify. Sieve lets yo
 - "Never return emails containing the word CONFIDENTIAL"
 - "Only emails from `@client.com` are visible"
 
-AWS IAM policies are powerful but painful to write. Sieve lets you say:
+AWS IAM can do this natively, but writing JSON IAM policies is slow and error-prone. Sieve lets you say the same thing in seconds:
 
 - "Only `t3.micro` instances, max 3, in `us-east-1` only"
 - "S3 read-only on bucket `data-exports`, prefix `2024/`"
@@ -98,7 +98,7 @@ Two-phase policy evaluation: pre-execution (should this operation happen?) and p
 ### Run locally
 
 ```bash
-git clone https://github.com/plandex-ai/sieve
+git clone https://github.com/murbard/Sieve
 cd sieve
 
 # Build

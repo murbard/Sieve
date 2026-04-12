@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plandex-ai/sieve/internal/database"
-	"github.com/plandex-ai/sieve/internal/policy"
+	"github.com/murbard/Sieve/internal/database"
+	"github.com/murbard/Sieve/internal/policy"
 )
 
 // Policy is a stored, reusable policy definition.

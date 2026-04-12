@@ -24,8 +24,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/plandex-ai/sieve/internal/connector"
-	"github.com/plandex-ai/sieve/internal/database"
+	"github.com/murbard/Sieve/internal/connector"
+	"github.com/murbard/Sieve/internal/database"
 	"golang.org/x/oauth2"
 )
 

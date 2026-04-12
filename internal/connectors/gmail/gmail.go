@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plandex-ai/sieve/internal/connector"
-	gmailclient "github.com/plandex-ai/sieve/internal/gmail"
+	"github.com/murbard/Sieve/internal/connector"
+	gmailclient "github.com/murbard/Sieve/internal/gmail"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	googleapi "google.golang.org/api/gmail/v1"

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/plandex-ai/sieve/internal/database"
+	"github.com/murbard/Sieve/internal/database"
 )
 
 // Entry represents a single row in the audit_log table.

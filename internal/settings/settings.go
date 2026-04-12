@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/plandex-ai/sieve/internal/database"
+	"github.com/murbard/Sieve/internal/database"
 )
 
 // Well-known setting keys.

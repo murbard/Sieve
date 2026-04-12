@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/plandex-ai/sieve/internal/connections"
-	"github.com/plandex-ai/sieve/internal/settings"
+	"github.com/murbard/Sieve/internal/connections"
+	"github.com/murbard/Sieve/internal/settings"
 )
 
 // Service generates Python policy scripts via LLM.

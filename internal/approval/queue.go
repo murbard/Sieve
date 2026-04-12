@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/plandex-ai/sieve/internal/database"
+	"github.com/murbard/Sieve/internal/database"
 )
 
 // Status represents the resolution state of an approval queue item.

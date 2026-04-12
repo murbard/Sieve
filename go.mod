@@ -1,4 +1,4 @@
-module github.com/plandex-ai/sieve
+module github.com/murbard/Sieve
 
 go 1.23
 

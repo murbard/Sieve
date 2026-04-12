@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plandex-ai/sieve/internal/database"
+	"github.com/murbard/Sieve/internal/database"
 )
 
 // Token represents a stored API token.
