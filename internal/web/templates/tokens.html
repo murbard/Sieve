@@ -102,7 +102,7 @@
             {{range .Tokens}}
             <tr class="hover:bg-slate-700/30 transition-colors">
               <td class="px-6 py-4 text-sm font-medium text-white">{{.Name}}</td>
-              <td class="px-6 py-4 text-sm text-slate-300">{{.RoleID}}</td>
+              <td class="px-6 py-4 text-sm text-slate-300">{{mapGet $.RoleNames .RoleID}}</td>
               <td class="px-6 py-4 text-sm text-slate-400">{{timeAgo .CreatedAt}}</td>
               <td class="px-6 py-4 text-sm text-slate-400">
                 {{if .ExpiresAt}}{{timeAgo (derefTime .ExpiresAt)}}{{else}}<span class="text-slate-600">Never</span>{{end}}

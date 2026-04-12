@@ -109,6 +109,12 @@ func funcMap() template.FuncMap {
 		"joinStrings": func(ss []string, sep string) string {
 			return strings.Join(ss, sep)
 		},
+		"mapGet": func(m map[string]string, key string) string {
+			if v, ok := m[key]; ok {
+				return v
+			}
+			return key // fallback to showing the key itself
+		},
 		"add": func(a, b int) int {
 			return a + b
 		},
@@ -571,31 +577,24 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 		toks = append(toks, t)
 	}
 
-	conns, err := s.connections.List()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	pols, err := s.policies.List()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	rolesList, err := s.roles.List()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Build a role ID → name map so the template can display names.
+	roleNames := make(map[string]string, len(rolesList))
+	for _, r := range rolesList {
+		roleNames[r.ID] = r.Name
+	}
+
 	data := map[string]any{
-		"Active":      "tokens",
-		"Tokens":      toks,
-		"Connections": conns,
-		"Policies":    pols,
-		"Roles":       rolesList,
-		"Filter":      filter,
+		"Active":    "tokens",
+		"Tokens":    toks,
+		"Roles":     rolesList,
+		"RoleNames": roleNames,
+		"Filter":    filter,
 	}
 	s.render(w, "tokens", data)
 }
