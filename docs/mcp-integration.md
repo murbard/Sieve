@@ -510,6 +510,145 @@ The `sieve token create` command prints this configuration snippet automatically
 
 Once configured, Claude Code will discover Sieve's tools via `tools/list` and use them when relevant to the conversation. All tool calls pass through Sieve's policy pipeline transparently.
 
+## Agent Workflow: Proposing Policy Changes
+
+Agents can discover their own permissions and propose changes through a structured workflow. This is useful when an agent needs capabilities it does not currently have.
+
+### Step 1: Agent inspects its own policy
+
+The agent calls `get_my_policy` to see what rules apply to its token, organized by connection.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "tools/call",
+  "params": {
+    "name": "get_my_policy",
+    "arguments": {}
+  }
+}
+```
+
+The response shows the full policy configuration per connection. The agent sees, for example, that it can list and read emails but has no rule allowing `send_email` -- so sending will hit the default deny.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "[{\"connection_id\":\"work\",\"policies\":[{\"name\":\"read-only\",\"config\":{\"rules\":[{\"match\":{\"operations\":[\"list_emails\",\"read_email\",\"read_thread\"]},\"action\":\"allow\"}],\"default_action\":\"deny\"}}]}]"
+      }
+    ]
+  }
+}
+```
+
+### Step 2: Agent learns the rule format
+
+Before proposing a policy, the agent calls `get_policy_schema` to learn what match fields, actions, and filters are available for each service type.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "method": "tools/call",
+  "params": {
+    "name": "get_policy_schema",
+    "arguments": {}
+  }
+}
+```
+
+The response contains the complete schema, including:
+- The four action types: `allow`, `deny`, `approval_required`, `filter`.
+- Common rule fields: `action`, `reason`, `filter_exclude`, `redact_patterns`.
+- Common match fields: `operations` (array of operation names).
+- Service-specific scopes with their operations and match fields. For Gmail: `from`, `to`, `subject_contains`, `content_contains`, `labels`. For LLM: `model`, `max_tokens`, `max_cost`. For EC2: `instance_type`, `region`, `max_count`. And so on.
+- Examples for each scope showing well-formed rule arrays.
+
+### Step 3: Agent proposes a policy
+
+Using the schema, the agent constructs a well-formed rules array and calls `propose_policy`. The proposal includes a name, a human-readable description explaining what the policy does and why, and the rules themselves.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "method": "tools/call",
+  "params": {
+    "name": "propose_policy",
+    "arguments": {
+      "name": "drafter-for-project-x",
+      "description": "Allow reading all emails and drafting replies, but require approval for sending. Needed for the Project X support workflow where the agent triages and drafts responses.",
+      "default_action": "deny",
+      "rules": [
+        {
+          "match": { "operations": ["list_emails", "read_email", "read_thread", "list_labels"] },
+          "action": "allow"
+        },
+        {
+          "match": { "operations": ["create_draft", "update_draft"] },
+          "action": "allow"
+        },
+        {
+          "match": { "operations": ["send_email", "send_draft", "reply"] },
+          "action": "approval_required",
+          "reason": "Agent wants to send an email — please review the content"
+        }
+      ]
+    }
+  }
+}
+```
+
+The agent receives confirmation that the proposal was submitted:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Policy proposal submitted for review.\n\nProposal: drafter-for-project-x\nDescription: Allow reading all emails and drafting replies, but require approval for sending. Needed for the Project X support workflow where the agent triages and drafts responses.\nRules: 3 rule(s)\nApproval ID: apr_xyz789\nReview at: the Sieve admin UI (/approvals)"
+      }
+    ]
+  }
+}
+```
+
+### Step 4: Admin reviews the proposal
+
+The proposal appears in the admin approval queue at `http://localhost:19816/approvals`. The admin can see:
+- Which agent (token) proposed the policy.
+- The policy name and description.
+- The full rules array.
+
+The admin reviews the rules and clicks **Approve** or **Reject**.
+
+### Step 5: Admin creates the policy and assigns it
+
+After approving, the admin creates the policy from the proposal. This can be done through the web UI at `http://localhost:19816/policies`.
+
+To make the policy take effect for the agent, the admin adds it to the agent's role. For example, if the agent's token uses role `developer` with connection `work`, the admin edits the role to add the new `drafter-for-project-x` policy to the `work` connection binding.
+
+Once the role is updated, the change takes effect immediately for all tokens referencing that role. The agent does not need a new token -- its next `tools/call` request will be evaluated against the updated policies.
+
+### Summary
+
+| Step | Who | Action |
+|------|-----|--------|
+| 1 | Agent | Calls `get_my_policy` to understand current permissions |
+| 2 | Agent | Calls `get_policy_schema` to learn the rule format |
+| 3 | Agent | Calls `propose_policy` with a name, description, and rules array |
+| 4 | Admin | Reviews the proposal in the approval queue |
+| 5 | Admin | Approves, creates the policy, and adds it to the agent's role |
+
 ## Error codes
 
 | Code | Meaning |
