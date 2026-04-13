@@ -1527,13 +1527,29 @@ func TestGetPolicySchema(t *testing.T) {
 	block := content[0].(map[string]any)
 	text, _ := block["text"].(string)
 
-	// Verify key fields are documented in the schema.
+	// Verify schema is organized by scope with per-scope operations and match fields.
+	for _, scope := range []string{
+		"gmail", "llm", "http_proxy", "drive", "calendar", "people",
+		"sheets", "docs", "ec2", "s3", "lambda", "ses", "dynamodb", "hyperstack",
+	} {
+		if !strings.Contains(text, `"`+scope+`"`) {
+			t.Errorf("schema missing scope %q", scope)
+		}
+	}
+
+	// Verify key match fields appear under their respective scopes.
 	for _, field := range []string{
-		"operations", "from", "to", "model", "providers", "max_tokens",
-		"max_cost", "path", "body_contains", "instance_type", "region",
-		"bucket", "key_prefix", "labels", "calendar_id", "spreadsheet_id",
-		"filter_exclude", "redact_patterns", "approval_required",
-		"example", "default_action",
+		"from", "to", "labels", "subject_contains",
+		"model", "providers", "max_tokens", "max_cost",
+		"path", "body_contains",
+		"instance_type", "region", "max_count", "ami", "ports", "cidr",
+		"bucket", "key_prefix",
+		"calendar_id", "attendee",
+		"spreadsheet_id", "range_pattern",
+		"document_id", "title_contains",
+		"table_name", "function_name",
+		"flavor", "max_vms",
+		"filter_exclude", "redact_patterns",
 	} {
 		if !strings.Contains(text, field) {
 			t.Errorf("schema missing field %q", field)
