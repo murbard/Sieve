@@ -44,6 +44,7 @@ import (
 	"github.com/murbard/Sieve/internal/connections"
 	"github.com/murbard/Sieve/internal/connector"
 	"github.com/murbard/Sieve/internal/policies"
+	"github.com/murbard/Sieve/internal/policy"
 	"github.com/murbard/Sieve/internal/roles"
 	"github.com/murbard/Sieve/internal/scriptgen"
 	"github.com/murbard/Sieve/internal/settings"
@@ -875,6 +876,12 @@ func (s *Server) handlePolicyCreate(w http.ResponseWriter, r *http.Request) {
 		policyConfig = make(map[string]any)
 	}
 
+	// Validate the policy rules against known operations.
+	if errs := s.validatePolicyRules(policyConfig); len(errs) > 0 {
+		http.Error(w, "Policy validation errors:\n"+strings.Join(errs, "\n"), http.StatusBadRequest)
+		return
+	}
+
 	if _, err := s.policies.Create(name, policyType, policyConfig); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -931,12 +938,48 @@ func (s *Server) handlePolicyUpdate(w http.ResponseWriter, r *http.Request) {
 		policyConfig = make(map[string]any)
 	}
 
+	if errs := s.validatePolicyRules(policyConfig); len(errs) > 0 {
+		http.Error(w, "Policy validation errors:\n"+strings.Join(errs, "\n"), http.StatusBadRequest)
+		return
+	}
+
 	if err := s.policies.Update(id, name, policyType, policyConfig); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	http.Redirect(w, r, "/policies", http.StatusSeeOther)
+}
+
+// validatePolicyRules gathers all operations from all live connections and
+// validates the policy config against them. Returns nil if valid.
+func (s *Server) validatePolicyRules(config map[string]any) []string {
+	// Gather all operations from all connections.
+	conns, err := s.connections.List()
+	if err != nil {
+		return nil // can't validate without connections, skip
+	}
+
+	var allOps []connector.OperationDef
+	seen := make(map[string]bool)
+	for _, conn := range conns {
+		c, err := s.connections.GetConnector(conn.ID)
+		if err != nil {
+			continue
+		}
+		for _, op := range c.Operations() {
+			if !seen[op.Name] {
+				allOps = append(allOps, op)
+				seen[op.Name] = true
+			}
+		}
+	}
+
+	if len(allOps) == 0 {
+		return nil // no connectors available, skip validation
+	}
+
+	return policy.ValidatePolicy(config, allOps)
 }
 
 func (s *Server) handlePolicyDelete(w http.ResponseWriter, r *http.Request) {
