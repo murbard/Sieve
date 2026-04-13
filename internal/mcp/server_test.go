@@ -1501,3 +1501,42 @@ func TestStory144_Extended_ToolsSchemasVerification(t *testing.T) {
 		t.Fatalf("story 144 ext: 'message_id' should be required for read_email, required=%v", readRequired)
 	}
 }
+
+// Test get_policy_schema returns complete schema with all match fields.
+func TestGetPolicySchema(t *testing.T) {
+	ts, tok, _ := setup(t)
+
+	resp := doRPC(t, ts, tok, jsonRPCRequest{
+		JSONRPC: "2.0",
+		ID:      300,
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name":      "get_policy_schema",
+			"arguments": map[string]any{},
+		},
+	})
+
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+
+	content, ok := resp.Result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatal("expected content in result")
+	}
+	block := content[0].(map[string]any)
+	text, _ := block["text"].(string)
+
+	// Verify key fields are documented in the schema.
+	for _, field := range []string{
+		"operations", "from", "to", "model", "providers", "max_tokens",
+		"max_cost", "path", "body_contains", "instance_type", "region",
+		"bucket", "key_prefix", "labels", "calendar_id", "spreadsheet_id",
+		"filter_exclude", "redact_patterns", "approval_required",
+		"example", "default_action",
+	} {
+		if !strings.Contains(text, field) {
+			t.Errorf("schema missing field %q", field)
+		}
+	}
+}

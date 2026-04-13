@@ -271,8 +271,17 @@ func (s *Server) handleToolsList(id any, tok *tokens.Token) *JSONRPCResponse {
 	})
 
 	tools = append(tools, ToolDef{
+		Name:        "get_policy_schema",
+		Description: "Get the full JSON schema for policy rules. Use this before calling propose_policy to understand exactly what match fields, actions, and filters are available.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+	})
+
+	tools = append(tools, ToolDef{
 		Name:        "propose_policy",
-		Description: "Propose a new policy or changes to an existing policy. The proposal goes to the human admin for approval — you cannot enact policy changes directly. Describe what the policy should do and provide the rules.",
+		Description: "Propose a new policy or changes to an existing policy. The proposal goes to the human admin for approval — you cannot enact policy changes directly. Call get_policy_schema first to see all available match fields and actions.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -284,9 +293,14 @@ func (s *Server) handleToolsList(id any, tok *tokens.Token) *JSONRPCResponse {
 					"type":        "string",
 					"description": "Human-readable description of what this policy does and why you're proposing it",
 				},
+				"default_action": map[string]any{
+					"type":        "string",
+					"enum":        []string{"allow", "deny"},
+					"description": "Action when no rule matches. Use 'deny' for fail-closed (recommended).",
+				},
 				"rules": map[string]any{
 					"type":        "array",
-					"description": "Array of policy rules. Each rule has: match (operations, from, subject_contains, labels, content_contains), action (allow/deny/approval_required/script/filter), and optional reason, filter_exclude, redact_patterns, script config.",
+					"description": "Ordered array of policy rules. First matching rule wins.",
 					"items": map[string]any{
 						"type": "object",
 					},
@@ -326,6 +340,8 @@ func (s *Server) handleToolsCall(ctx context.Context, id any, tok *tokens.Token,
 		return s.handleListPolicies(id, tok, start)
 	case "get_my_policy":
 		return s.handleGetMyPolicy(id, tok, start)
+	case "get_policy_schema":
+		return s.handleGetPolicySchema(id, tok, start)
 	case "propose_policy":
 		return s.handleProposePolicy(id, tok, start, call.Arguments)
 	}
@@ -597,6 +613,102 @@ func (s *Server) handleGetMyPolicy(id any, tok *tokens.Token, start time.Time) *
 
 	resultJSON, _ := json.Marshal(results)
 	s.logAudit(tok, "", "get_my_policy", nil, "allow", "", time.Since(start).Milliseconds())
+
+	return &JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result:  ToolCallResult{Content: []ContentBlock{{Type: "text", Text: string(resultJSON)}}},
+	}
+}
+
+func (s *Server) handleGetPolicySchema(id any, tok *tokens.Token, start time.Time) *JSONRPCResponse {
+	schema := map[string]any{
+		"description": "A policy contains an ordered list of rules (first match wins) and a default_action.",
+		"rule": map[string]any{
+			"action": map[string]any{
+				"type":    "string",
+				"enum":    []string{"allow", "deny", "approval_required", "filter"},
+				"description": "'allow' permits the operation. 'deny' blocks it. 'approval_required' queues for human approval. 'filter' is like allow but applies content filters (exclude/redact) to the response.",
+			},
+			"reason": "Optional human-readable reason shown when this rule fires.",
+			"filter_exclude": "If action is 'filter': remove items from the response containing this string (case-insensitive).",
+			"redact_patterns": "If action is 'filter': array of regex patterns to replace with [REDACTED] in the response.",
+			"match": map[string]any{
+				"description": "Conditions that must ALL be true for this rule to fire. Omit match entirely for a catch-all rule.",
+				"fields": map[string]any{
+					"operations":      "Array of operation names to match, e.g. [\"list_emails\", \"send_email\"]. Empty = match all.",
+					"from":            "Array of sender patterns (glob: \"*@company.com\"). Gmail.",
+					"to":              "Array of recipient patterns (glob: \"*@company.com\"). Gmail/SES.",
+					"subject_contains": "Array of strings — match if subject contains any. Gmail.",
+					"content_contains": "String — match if response body contains this. Gmail.",
+					"labels":          "Array of label names — match if email has any of these. Gmail.",
+					"model":           "Array of model patterns (glob: \"claude-*\"). LLM.",
+					"providers":       "Array of provider names (exact: \"anthropic\", \"openai\"). LLM.",
+					"max_tokens":      "Integer — deny if request's max_tokens exceeds this. LLM.",
+					"max_cost":        "Float — deny if estimated cost exceeds this. LLM.",
+					"extended_thinking": "\"enabled\" or \"disabled\". Anthropic.",
+					"system_prompt_contains": "String — match if system prompt contains this. LLM.",
+					"max_temperature": "Float — deny if temperature exceeds this. OpenAI.",
+					"json_mode":       "\"required\" or \"forbidden\". OpenAI.",
+					"grounding":       "\"enabled\" or \"disabled\". Gemini.",
+					"safety_threshold": "Safety level string. Gemini.",
+					"path":            "Glob pattern for request path (e.g. \"/v1/messages*\"). HTTP proxy.",
+					"body_contains":   "String — match if request body contains this. HTTP proxy.",
+					"instance_type":   "Array of allowed instance types (e.g. [\"t3.micro\"]). EC2.",
+					"region":          "AWS region string (e.g. \"us-east-1\"). EC2/AWS.",
+					"max_count":       "Integer — max instances per request. EC2.",
+					"ami":             "Glob pattern for AMI ID. EC2.",
+					"vpc":             "VPC or subnet ID. EC2.",
+					"ports":           "Comma-separated allowed ports (e.g. \"443,8080\"). EC2 security groups.",
+					"cidr":            "CIDR pattern; use \"!0.0.0.0/0\" to block public access. EC2.",
+					"bucket":          "Glob pattern for S3 bucket name (e.g. \"prod-*\"). S3.",
+					"key_prefix":      "Prefix match for S3 object key (e.g. \"public/\"). S3.",
+					"function_name":   "Glob pattern for Lambda function name. Lambda.",
+					"recipient":       "Glob pattern for email recipient. SES.",
+					"sender_identity": "Exact match for sender email. SES.",
+					"table_name":      "Exact match for DynamoDB table name. DynamoDB.",
+					"index_name":      "Exact match for DynamoDB index name. DynamoDB.",
+					"mime_type":       "Glob pattern for file MIME type. Drive.",
+					"owner":           "Glob pattern for file owner email. Drive.",
+					"shared_status":   "\"shared with me\" or \"owned by me\". Drive.",
+					"calendar_id":     "Exact match for calendar ID. Calendar.",
+					"attendee":        "Glob pattern for event attendee email. Calendar.",
+					"spreadsheet_id":  "Exact match for spreadsheet ID. Sheets.",
+					"range_pattern":   "Glob pattern for cell range (e.g. \"Sheet1!*\"). Sheets.",
+					"document_id":     "Exact match for document ID. Docs.",
+					"title_contains":  "Case-insensitive substring match for document title. Docs.",
+					"contact_group":   "Exact match for contact group name. People.",
+					"allowed_fields":  "Comma-separated list of allowed contact fields (e.g. \"names,emailAddresses\"). People.",
+					"flavor":          "Exact match for VM flavor. Hyperstack.",
+					"max_vms":         "Integer — max VMs per request. Hyperstack.",
+					"tag":             "Tag match in \"key=value\" format. EC2.",
+				},
+			},
+		},
+		"example": map[string]any{
+			"default_action": "deny",
+			"rules": []any{
+				map[string]any{
+					"match":  map[string]any{"operations": []any{"list_emails", "read_email"}, "from": []any{"*@company.com"}},
+					"action": "allow",
+				},
+				map[string]any{
+					"match":          map[string]any{"operations": []any{"list_emails"}},
+					"action":         "filter",
+					"filter_exclude": "CONFIDENTIAL",
+					"redact_patterns": []any{`\d{3}-\d{2}-\d{4}`},
+				},
+				map[string]any{
+					"match":  map[string]any{"operations": []any{"send_email"}, "to": []any{"*@company.com"}},
+					"action": "approval_required",
+					"reason": "sending requires human approval",
+				},
+			},
+		},
+	}
+
+	resultJSON, _ := json.Marshal(schema)
+	s.logAudit(tok, "", "get_policy_schema", nil, "allow", "", time.Since(start).Milliseconds())
 
 	return &JSONRPCResponse{
 		JSONRPC: "2.0",
