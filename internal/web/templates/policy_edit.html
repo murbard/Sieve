@@ -615,9 +615,68 @@
         if (r.ops && r.ops.length > 0) match.operations = r.ops;
         if (r.phase && r.phase !== "pre") match.phase = r.phase;
         if (r.from) match.from = [r.from];
+        if (r.to) match.to = [r.to];
         if (r.subject) match.subject_contains = [r.subject];
         if (r.label) match.labels = [r.label];
         if (r.content) { match.content_contains = r.content; }
+        // LLM scope fields
+        if (r.providers && r.providers.length > 0) match.providers = r.providers;
+        if (r.model) match.model = r.model;
+        if (r.max_tokens) match.max_tokens = r.max_tokens;
+        if (r.max_cost) match.max_cost = r.max_cost;
+        if (r.extended_thinking) match.extended_thinking = r.extended_thinking;
+        if (r.system_prompt) match.system_prompt_contains = r.system_prompt;
+        if (r.temperature) match.max_temperature = r.temperature;
+        if (r.json_mode) match.json_mode = r.json_mode;
+        if (r.grounding) match.grounding = r.grounding;
+        if (r.safety) match.safety_threshold = r.safety;
+        // HTTP Proxy scope fields
+        if (r.path) match.path = r.path;
+        if (r.body) match.body_contains = r.body;
+        // Drive scope fields
+        if (r.drive_mime) match.mime_type = r.drive_mime;
+        if (r.drive_owner) match.owner = r.drive_owner;
+        if (r.drive_path) match.path_contains = r.drive_path;
+        if (r.drive_shared) match.shared_status = r.drive_shared;
+        // Calendar scope fields
+        if (r.cal_id) match.calendar_id = r.cal_id;
+        if (r.cal_attendee) match.attendee = r.cal_attendee;
+        if (r.cal_timerange) match.time_range = r.cal_timerange;
+        // People scope fields
+        if (r.people_group) match.contact_group = r.people_group;
+        if (r.people_fields) match.allowed_fields = r.people_fields;
+        // Sheets scope fields
+        if (r.sheets_id) match.spreadsheet_id = r.sheets_id;
+        if (r.sheets_range) match.range_pattern = r.sheets_range;
+        if (r.sheets_readonly) match.readonly_mode = r.sheets_readonly;
+        // Docs scope fields
+        if (r.docs_id) match.document_id = r.docs_id;
+        if (r.docs_title) match.title_contains = r.docs_title;
+        // AWS EC2 scope fields
+        if (r.ec2_instance_type) match.instance_type = r.ec2_instance_type;
+        if (r.ec2_region) match.region = r.ec2_region;
+        if (r.ec2_max_count) match.max_count = r.ec2_max_count;
+        if (r.ec2_ami) match.ami = r.ec2_ami;
+        if (r.ec2_vpc) match.vpc = r.ec2_vpc;
+        if (r.ec2_tag) match.tag = r.ec2_tag;
+        if (r.ec2_ports) match.ports = r.ec2_ports;
+        if (r.ec2_cidr) match.cidr = r.ec2_cidr;
+        // AWS S3 scope fields
+        if (r.s3_bucket) match.bucket = r.s3_bucket;
+        if (r.s3_prefix) match.key_prefix = r.s3_prefix;
+        if (r.s3_action) match.action_type = r.s3_action;
+        // AWS Lambda scope fields
+        if (r.lambda_function) match.function_name = r.lambda_function;
+        if (r.lambda_qualifier) match.qualifier = r.lambda_qualifier;
+        // AWS SES scope fields
+        if (r.ses_to) match.recipient = r.ses_to;
+        if (r.ses_from) match.sender_identity = r.ses_from;
+        // AWS DynamoDB scope fields
+        if (r.dynamo_table) match.table_name = r.dynamo_table;
+        if (r.dynamo_index) match.index_name = r.dynamo_index;
+        // Hyperstack scope fields
+        if (r.hs_flavor) match.flavor = r.hs_flavor;
+        if (r.hs_max_vms) match.max_vms = r.hs_max_vms;
 
         if (Object.keys(match).length > 0) rule.match = match;
         return rule;
@@ -651,9 +710,68 @@
             if (r.match.operations) uiRule.ops = r.match.operations;
             if (r.match.phase) uiRule.phase = r.match.phase;
             if (r.match.from && r.match.from.length) uiRule.from = r.match.from[0];
+            if (r.match.to && r.match.to.length) uiRule.to = r.match.to[0];
             if (r.match.subject_contains && r.match.subject_contains.length) uiRule.subject = r.match.subject_contains[0];
             if (r.match.content_contains) uiRule.content = r.match.content_contains;
             if (r.match.labels && r.match.labels.length) uiRule.label = r.match.labels[0];
+            // LLM scope fields
+            if (r.match.providers && r.match.providers.length > 0) uiRule.providers = r.match.providers;
+            if (r.match.model) uiRule.model = typeof r.match.model === 'string' ? r.match.model : (r.match.model.length ? r.match.model[0] : '');
+            if (r.match.max_tokens) uiRule.max_tokens = r.match.max_tokens;
+            if (r.match.max_cost) uiRule.max_cost = r.match.max_cost;
+            if (r.match.extended_thinking) uiRule.extended_thinking = r.match.extended_thinking;
+            if (r.match.system_prompt_contains) uiRule.system_prompt = r.match.system_prompt_contains;
+            if (r.match.max_temperature) uiRule.temperature = r.match.max_temperature;
+            if (r.match.json_mode) uiRule.json_mode = r.match.json_mode;
+            if (r.match.grounding) uiRule.grounding = r.match.grounding;
+            if (r.match.safety_threshold) uiRule.safety = r.match.safety_threshold;
+            // HTTP Proxy scope fields
+            if (r.match.path) uiRule.path = r.match.path;
+            if (r.match.body_contains) uiRule.body = r.match.body_contains;
+            // Drive scope fields
+            if (r.match.mime_type) uiRule.drive_mime = r.match.mime_type;
+            if (r.match.owner) uiRule.drive_owner = r.match.owner;
+            if (r.match.path_contains) uiRule.drive_path = r.match.path_contains;
+            if (r.match.shared_status) uiRule.drive_shared = r.match.shared_status;
+            // Calendar scope fields
+            if (r.match.calendar_id) uiRule.cal_id = r.match.calendar_id;
+            if (r.match.attendee) uiRule.cal_attendee = r.match.attendee;
+            if (r.match.time_range) uiRule.cal_timerange = r.match.time_range;
+            // People scope fields
+            if (r.match.contact_group) uiRule.people_group = r.match.contact_group;
+            if (r.match.allowed_fields) uiRule.people_fields = r.match.allowed_fields;
+            // Sheets scope fields
+            if (r.match.spreadsheet_id) uiRule.sheets_id = r.match.spreadsheet_id;
+            if (r.match.range_pattern) uiRule.sheets_range = r.match.range_pattern;
+            if (r.match.readonly_mode) uiRule.sheets_readonly = r.match.readonly_mode;
+            // Docs scope fields
+            if (r.match.document_id) uiRule.docs_id = r.match.document_id;
+            if (r.match.title_contains) uiRule.docs_title = r.match.title_contains;
+            // AWS EC2 scope fields
+            if (r.match.instance_type) uiRule.ec2_instance_type = typeof r.match.instance_type === 'string' ? r.match.instance_type : (r.match.instance_type.length ? r.match.instance_type[0] : '');
+            if (r.match.region) uiRule.ec2_region = r.match.region;
+            if (r.match.max_count) uiRule.ec2_max_count = r.match.max_count;
+            if (r.match.ami) uiRule.ec2_ami = r.match.ami;
+            if (r.match.vpc) uiRule.ec2_vpc = r.match.vpc;
+            if (r.match.tag) uiRule.ec2_tag = r.match.tag;
+            if (r.match.ports) uiRule.ec2_ports = r.match.ports;
+            if (r.match.cidr) uiRule.ec2_cidr = r.match.cidr;
+            // AWS S3 scope fields
+            if (r.match.bucket) uiRule.s3_bucket = typeof r.match.bucket === 'string' ? r.match.bucket : '';
+            if (r.match.key_prefix) uiRule.s3_prefix = r.match.key_prefix;
+            if (r.match.action_type) uiRule.s3_action = r.match.action_type;
+            // AWS Lambda scope fields
+            if (r.match.function_name) uiRule.lambda_function = r.match.function_name;
+            if (r.match.qualifier) uiRule.lambda_qualifier = r.match.qualifier;
+            // AWS SES scope fields
+            if (r.match.recipient) uiRule.ses_to = r.match.recipient;
+            if (r.match.sender_identity) uiRule.ses_from = r.match.sender_identity;
+            // AWS DynamoDB scope fields
+            if (r.match.table_name) uiRule.dynamo_table = r.match.table_name;
+            if (r.match.index_name) uiRule.dynamo_index = r.match.index_name;
+            // Hyperstack scope fields
+            if (r.match.flavor) uiRule.hs_flavor = r.match.flavor;
+            if (r.match.max_vms) uiRule.hs_max_vms = r.match.max_vms;
           }
           // Map engine action names to UI action names
           if (uiRule.action === "approval_required") uiRule.action = "require_approval";

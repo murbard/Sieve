@@ -116,6 +116,13 @@ func (q *Queue) Submit(req *SubmitRequest) (*Item, error) {
 // resolved (approved or rejected) or the timeout elapses. Returns an error on
 // timeout.
 func (q *Queue) WaitForResolution(id string, timeout time.Duration) (*Item, error) {
+	// Check if already resolved BEFORE registering the listener. This closes
+	// the race where Approve/Reject is called between Submit and WaitForResolution.
+	item, err := q.Get(id)
+	if err == nil && item.Status != StatusPending {
+		return item, nil
+	}
+
 	// Buffered channel (cap 1): if the item is resolved after timeout but
 	// before GC, the notify() send won't block or panic.
 	ch := make(chan *Item, 1)
@@ -123,6 +130,13 @@ func (q *Queue) WaitForResolution(id string, timeout time.Duration) (*Item, erro
 	q.mu.Lock()
 	q.listeners[id] = ch
 	q.mu.Unlock()
+
+	// Check again after registering, in case it was resolved between the
+	// first check and the listener registration (double-check pattern).
+	item, err = q.Get(id)
+	if err == nil && item.Status != StatusPending {
+		return item, nil
+	}
 
 	// Cleanup on all exit paths (success or timeout) to prevent listener
 	// map from growing unboundedly with stale entries.

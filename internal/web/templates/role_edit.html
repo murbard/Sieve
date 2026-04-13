@@ -1,10 +1,10 @@
-{{define "roles"}}
+{{define "role_edit"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Roles - Sieve</title>
+  <title>Edit Role: {{.Role.Name}} - Sieve</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>body { font-family: 'Inter', sans-serif; }</style>
@@ -13,17 +13,14 @@
   {{template "nav" .}}
 
   <main class="ml-64 p-8">
-    <div class="max-w-6xl">
-      <h1 class="text-2xl font-bold text-white mb-2">Roles</h1>
-      <p class="text-sm text-slate-400 mb-6">A role bundles connections with per-connection policies. Tokens reference a role — change the role, all tokens update.</p>
+    <div class="max-w-4xl">
+      <h1 class="text-2xl font-bold text-white mb-6">Edit Role: {{.Role.Name}}</h1>
 
-      <!-- Create Role -->
-      <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-8">
-        <h2 class="text-lg font-semibold text-white mb-4">Create Role</h2>
-        <form method="POST" action="/roles/create" onsubmit="return prepareRoleSubmit()">
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+        <form method="POST" action="/roles/{{.Role.ID}}/update" onsubmit="return prepareRoleSubmit()">
           <div class="mb-4">
             <label class="block text-sm font-medium text-slate-400 mb-1.5">Role Name</label>
-            <input type="text" name="name" required placeholder="e.g. project-x-dev"
+            <input type="text" name="name" required value="{{.Role.Name}}"
                    class="w-full max-w-md rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
           </div>
 
@@ -39,62 +36,20 @@
             <button type="button" onclick="addBinding()" class="mt-3 text-sm text-indigo-400 hover:text-indigo-300">+ Add connection</button>
           </div>
 
-          <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors">
-            Create Role
-          </button>
+          <div class="flex gap-3">
+            <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors">
+              Save Changes
+            </button>
+            <a href="/roles" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors">
+              Cancel
+            </a>
+          </div>
         </form>
-      </div>
-
-      <!-- Roles Table -->
-      <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-slate-700">
-              <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Name</th>
-              <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Connections</th>
-              <th class="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Created</th>
-              <th class="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-700">
-            {{range .Roles}}
-            <tr class="hover:bg-slate-700/30 transition-colors">
-              <td class="px-6 py-4 text-sm font-medium text-white">{{.Name}}</td>
-              <td class="px-6 py-4 text-sm text-slate-300">
-                {{range .Bindings}}
-                <div class="mb-1">
-                  <span class="text-slate-200">{{.ConnectionID}}</span>
-                  {{if .PolicyIDs}}
-                  <span class="text-slate-500 text-xs ml-1">({{len .PolicyIDs}} policies)</span>
-                  {{else}}
-                  <span class="text-red-400 text-xs ml-1">(deny all)</span>
-                  {{end}}
-                </div>
-                {{end}}
-              </td>
-              <td class="px-6 py-4 text-sm text-slate-400">{{timeAgo .CreatedAt}}</td>
-              <td class="px-6 py-4 text-right space-x-3">
-                <a href="/roles/{{.ID}}/edit" class="text-sm text-indigo-400 hover:text-indigo-300 font-medium">Edit</a>
-                <form method="POST" action="/roles/{{.ID}}/delete"
-                      onsubmit="return confirm('Delete role \'{{.Name}}\'?')"
-                      class="inline">
-                  <button type="submit" class="text-sm text-red-400 hover:text-red-300 font-medium">Delete</button>
-                </form>
-              </td>
-            </tr>
-            {{else}}
-            <tr>
-              <td colspan="4" class="px-6 py-12 text-center text-slate-500">No roles yet. Create one above.</td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
       </div>
     </div>
   </main>
 
   <script>
-    // Available connections and policies (passed from Go template).
     var connections = [
       {{range .Connections}}
       {id: "{{.ID}}", name: "{{.DisplayName}}", type: "{{.ConnectorType}}"},
@@ -106,7 +61,14 @@
       {{end}}
     ];
 
-    var bindings = [];
+    // Initialize bindings from existing role data.
+    var bindings = [
+      {{range .Role.Bindings}}
+      {connection_id: "{{.ConnectionID}}", policy_ids: [{{range $i, $p := .PolicyIDs}}{{if $i}},{{end}}"{{$p}}"{{end}}]},
+      {{end}}
+    ];
+
+    renderBindings();
 
     function addBinding() {
       bindings.push({connection_id: "", policy_ids: []});
@@ -152,7 +114,6 @@
         '</div>';
       }).join("");
 
-      // Attach change listeners
       document.querySelectorAll(".binding-conn").forEach(function(sel) {
         sel.addEventListener("change", function() {
           bindings[parseInt(this.dataset.index)].connection_id = this.value;
@@ -172,7 +133,6 @@
     }
 
     function prepareRoleSubmit() {
-      // Filter out bindings with no connection selected.
       var valid = bindings.filter(function(b) { return b.connection_id !== ""; });
       document.getElementById("bindings-json").value = JSON.stringify(valid);
       return true;

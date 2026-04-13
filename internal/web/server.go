@@ -78,12 +78,12 @@ type Server struct {
 // funcMap returns the template function map used across all templates.
 func funcMap() template.FuncMap {
 	return template.FuncMap{
-		"json": func(v any) string {
+		"json": func(v any) template.JS {
 			b, err := json.MarshalIndent(v, "", "  ")
 			if err != nil {
-				return fmt.Sprintf("error: %v", err)
+				return template.JS(fmt.Sprintf("null /* error: %v */", err))
 			}
-			return string(b)
+			return template.JS(b)
 		},
 		"timeAgo": func(t time.Time) string {
 			d := time.Since(t)
@@ -165,7 +165,7 @@ func NewServer(
 	}
 
 	// Parse each page template together with the nav partial.
-	pages := []string{"connections", "tokens", "approvals", "audit", "policies", "policy_edit", "settings", "roles"}
+	pages := []string{"connections", "tokens", "approvals", "audit", "policies", "policy_edit", "settings", "roles", "role_edit"}
 	for _, page := range pages {
 		t := template.Must(
 			template.New("").Funcs(funcMap()).ParseFS(templateFS,
@@ -774,7 +774,7 @@ func (s *Server) handleRoleEdit(w http.ResponseWriter, r *http.Request) {
 		"Connections": conns,
 		"Policies":    pols,
 	}
-	s.render(w, "roles", data)
+	s.render(w, "role_edit", data)
 }
 
 func (s *Server) handleRoleUpdate(w http.ResponseWriter, r *http.Request) {

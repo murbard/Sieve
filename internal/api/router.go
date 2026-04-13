@@ -15,9 +15,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -289,6 +291,14 @@ func (rt *Router) executeOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Re-validate the token after the approval wait. The token may have
+		// been revoked while waiting for human approval.
+		if _, err := rt.tokens.Validate(r.Header.Get("Authorization")[len("Bearer "):]); err != nil {
+			rt.logAudit(tok, connID, operation, params, "denied(revoked_during_approval)", "", time.Since(start).Milliseconds())
+			writeError(w, http.StatusUnauthorized, "token was revoked during approval wait")
+			return
+		}
+
 		result, err := conn.Execute(r.Context(), operation, params)
 		if err != nil {
 			rt.logAudit(tok, connID, operation, params, "approved(error)", "", time.Since(start).Milliseconds())
@@ -390,19 +400,35 @@ func (rt *Router) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build policy params with method and path. For requests with a JSON body,
+	// peek at the body and merge top-level fields into params so policy rules
+	// can match on fields like "model", "max_tokens", etc.
+	policyParams := map[string]any{
+		"method": r.Method,
+		"path":   proxyPath,
+	}
+	if r.Body != nil && r.Method != http.MethodGet {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err == nil && len(bodyBytes) > 0 {
+			// Restore body for the proxy to forward.
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			// Try to parse as JSON and merge top-level fields.
+			var bodyFields map[string]any
+			if json.Unmarshal(bodyBytes, &bodyFields) == nil {
+				for k, v := range bodyFields {
+					policyParams[k] = v
+				}
+			}
+		}
+	}
+
 	policyReq := &policy.PolicyRequest{
 		Operation:  operation,
 		Connection: connID,
 		Connector:  "http_proxy",
 		Phase:      "pre",
-		Params: map[string]any{
-			"method": r.Method,
-			"path":   proxyPath,
-		},
-		Metadata: map[string]any{
-			"method": r.Method,
-			"path":   proxyPath,
-		},
+		Params:     policyParams,
+		Metadata:   policyParams,
 	}
 
 	decision, err := evaluator.Evaluate(r.Context(), policyReq)

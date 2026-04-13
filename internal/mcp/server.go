@@ -213,7 +213,7 @@ func (s *Server) handleToolsList(id any, tok *tokens.Token) *JSONRPCResponse {
 	multiConn := len(connIDs) > 1
 
 	for _, connID := range connIDs {
-		conn, err := s.connections.Get(connID)
+		_, err := s.connections.Get(connID)
 		if err != nil {
 			continue // skip connections we can't load
 		}
@@ -229,7 +229,7 @@ func (s *Server) handleToolsList(id any, tok *tokens.Token) *JSONRPCResponse {
 			// tool names can confuse LLM tool callers.
 			toolName := strings.ReplaceAll(op.Name, ".", "_")
 			if multiConn {
-				toolName = conn.ConnectorType + "_" + toolName
+				toolName = connID + "_" + toolName
 			}
 
 			schema := buildInputSchema(op, multiConn)
@@ -678,13 +678,9 @@ func (s *Server) resolveToolCall(role *roles.Role, call ToolCallParams) (connID 
 		return connIDs[0], denormalizeDots(call.Name), nil
 	}
 
-	// Multiple connections: tool name should be prefixed. Find the matching connector.
+	// Multiple connections: tool name is prefixed with connection ID.
 	for _, cID := range connIDs {
-		conn, err := s.connections.Get(cID)
-		if err != nil {
-			continue
-		}
-		prefix := conn.ConnectorType + "_"
+		prefix := cID + "_"
 		if strings.HasPrefix(call.Name, prefix) {
 			return cID, denormalizeDots(strings.TrimPrefix(call.Name, prefix)), nil
 		}

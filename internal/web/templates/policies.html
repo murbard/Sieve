@@ -1919,6 +1919,7 @@
         if (r.ops && r.ops.length > 0) match.operations = r.ops;
         if (r.phase && r.phase !== "pre") match.phase = r.phase;
         if (r.from) match.from = [r.from];
+        if (r.to) match.to = [r.to];
         if (r.subject) match.subject_contains = [r.subject];
         if (r.label) match.labels = [r.label];
         if (r.content) { match.content_contains = r.content; }
