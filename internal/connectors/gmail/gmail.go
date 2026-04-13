@@ -25,6 +25,7 @@ package gmail
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/murbard/Sieve/internal/connector"
@@ -709,6 +710,12 @@ func getIntParam(params map[string]any, key string) int {
 		return int(v)
 	case float32:
 		return int(v)
+	case string:
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return 0
+		}
+		return n
 	default:
 		return 0
 	}

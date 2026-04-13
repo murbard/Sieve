@@ -96,7 +96,10 @@ func NewClient(service *gmail.Service, userEmail string) *Client {
 func (c *Client) ListEmails(ctx context.Context, query SearchQuery) (*SearchResult, error) {
 	maxResults := query.MaxResults
 	if maxResults == 0 {
-		maxResults = 20
+		maxResults = 100
+	}
+	if maxResults > 500 {
+		maxResults = 500
 	}
 
 	call := c.service.Users.Messages.List("me").Context(ctx).MaxResults(maxResults)
