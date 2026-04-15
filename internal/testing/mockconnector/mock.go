@@ -136,6 +136,13 @@ func (m *Mock) Execute(_ context.Context, op string, params map[string]any) (any
 			map[string]any{"id": "INBOX", "name": "INBOX"},
 			map[string]any{"id": "SENT", "name": "SENT"},
 		}, nil
+	case "get_attachment":
+		return map[string]any{
+			"id":        params["attachment_id"],
+			"filename":  "report.pdf",
+			"mime_type": "application/pdf",
+			"size":      int64(1024),
+		}, nil
 	default:
 		return nil, fmt.Errorf("mock: operation %q not configured", op)
 	}

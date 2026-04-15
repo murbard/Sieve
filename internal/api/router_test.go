@@ -1533,3 +1533,85 @@ func TestBugfix_GmailPageTokenForwarded(t *testing.T) {
 		t.Fatalf("expected 200 with pageToken, got %d: %s", resp.StatusCode, body)
 	}
 }
+
+func TestGmailGetAttachment(t *testing.T) {
+	url, tok := setupGmail(t)
+
+	resp := doRequest(t, "GET",
+		url+"/gmail/v1/users/me/messages/msg-123/attachments/att-456", tok, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body := readBody(t, resp)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var body map[string]any
+	json.NewDecoder(resp.Body).Decode(&body)
+
+	// Verify the mock received the correct params.
+	if body["id"] != "att-456" {
+		t.Fatalf("expected attachment_id 'att-456', got %v", body["id"])
+	}
+	if body["filename"] != "report.pdf" {
+		t.Fatalf("expected filename 'report.pdf', got %v", body["filename"])
+	}
+	if body["mime_type"] != "application/pdf" {
+		t.Fatalf("expected mime_type 'application/pdf', got %v", body["mime_type"])
+	}
+}
+
+func TestGmailGetAttachmentWithUserId(t *testing.T) {
+	url, tok := setupGmail(t)
+
+	// Use explicit connection alias instead of "me".
+	resp := doRequest(t, "GET",
+		url+"/gmail/v1/users/test-conn/messages/msg-001/attachments/att-001", tok, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body := readBody(t, resp)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestGmailGetAttachmentDeniedByPolicy(t *testing.T) {
+	env := testenv.New(t)
+
+	// Policy that only allows list_emails — get_attachment should be denied.
+	pol, err := env.Policies.Create("no-attach", "rules", map[string]any{
+		"rules": []any{
+			map[string]any{
+				"match":  map[string]any{"operations": []any{"list_emails"}},
+				"action": "allow",
+			},
+		},
+		"default_action": "deny",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock := mockconn.New("google")
+	env.Registry.Register(mock.Meta(), mock.Factory())
+	env.Connections.Add("gmail-deny", "google", "Gmail", map[string]any{})
+
+	role, _ := env.Roles.Create("deny-attach-role", []roles.Binding{
+		{ConnectionID: "gmail-deny", PolicyIDs: []string{pol.ID}},
+	})
+	tokResult, _ := env.Tokens.Create(&tokens.CreateRequest{Name: "deny-attach-tok", RoleID: role.ID})
+
+	router := api.NewRouter(env.Tokens, env.Connections, env.Policies, env.Roles, env.Approval, env.Audit)
+	srv := httptest.NewServer(router.Handler())
+	t.Cleanup(srv.Close)
+
+	resp := doRequest(t, "GET",
+		srv.URL+"/gmail/v1/users/gmail-deny/messages/msg-1/attachments/att-1",
+		tokResult.PlaintextToken, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 403 {
+		body := readBody(t, resp)
+		t.Fatalf("expected 403 (get_attachment not in policy), got %d: %s", resp.StatusCode, body)
+	}
+}
